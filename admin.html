@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LUMSIC Admin Command Center</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <script>
+      (function() {
+        function createFallbackStorage() {
+          var store = {};
+          return {
+            getItem: function(key) { return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null; },
+            setItem: function(key, val) { store[key] = String(val); },
+            removeItem: function(key) { delete store[key]; },
+            clear: function() { store = {}; },
+            key: function(i) { return Object.keys(store)[i] || null; },
+            get length() { return Object.keys(store).length; }
+          };
+        }
+        try {
+          var test = window.localStorage;
+          test.setItem('__probe__', '1');
+          test.removeItem('__probe__');
+        } catch (e) {
+          try {
+            var fb = createFallbackStorage();
+            Object.defineProperty(window, 'localStorage', { value: fb, configurable: true });
+            Object.defineProperty(window, 'sessionStorage', { value: createFallbackStorage(), configurable: true });
+          } catch (err) {}
+        }
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body style="background-color: #070A12; color: #FFFFFF; min-height: 100vh; margin: 0;" class="bg-[#070A12] text-white font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/admin-main.tsx"></script>
+  </body>
+</html>

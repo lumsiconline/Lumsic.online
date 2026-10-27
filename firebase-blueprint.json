@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and identity info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "astrologer", "admin"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Administrator registration record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "assignedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "AstrologerRole": {
+      "title": "AstrologerRole",
+      "description": "Astrologer registration record linked to reader profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "readerId": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "CustomerRecord": {
+      "title": "CustomerRecord",
+      "description": "Customer consultation details and history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "ConsultationSession": {
+      "title": "ConsultationSession",
+      "description": "Secure private consultation session between customer and astrologer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "assignedReaderId": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "customerId"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Private message within a consultation session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" }
+      },
+      "required": ["id", "sessionId", "text"]
+    },
+    "WalletRecord": {
+      "title": "WalletRecord",
+      "description": "Customer wallet balance (server authoritative)",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "totalBalance": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "required": ["customerId", "totalBalance"]
+    },
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Heartbeat collection for testing connection",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Application users profile data"
+    },
+    "/admins/{adminId}": {
+      "schema": "AdminRole",
+      "description": "Designated administrators of the system"
+    },
+    "/astrologers/{astrologerId}": {
+      "schema": "AstrologerRole",
+      "description": "Designated astrologers with consultation dashboard access"
+    },
+    "/customers/{customerId}": {
+      "schema": "CustomerRecord",
+      "description": "Customer demographic and intake records"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "ConsultationSession",
+      "description": "Encrypted consultation sessions"
+    },
+    "/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Encrypted consultation messages"
+    },
+    "/wallets/{walletId}": {
+      "schema": "WalletRecord",
+      "description": "Customer wallet records"
+    },
+    "/test/{testId}": {
+      "schema": "TestConnection",
+      "description": "Test connection endpoint"
+    }
+  }
+}

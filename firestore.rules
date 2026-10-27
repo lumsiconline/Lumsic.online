@@ -1,0 +1,176 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper security functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'info.lumsic@gmail.com' ||
+        request.auth.token.email == 'bankush014@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isAstrologer() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/astrologers/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 1. Connection Heartbeat Test
+    match /test/{testId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 2. User Profiles - Prevent privilege escalation and cross-user snooping
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) && (
+        request.resource.data.role == 'user' || isAdmin()
+      );
+      allow update: if isValidId(userId) && (
+        isAdmin() || (
+          isOwner(userId) &&
+          request.resource.data.role == resource.data.role
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 3. Admin Directory - Read/write strictly restricted to verified Admins
+    match /admins/{adminId} {
+      allow read: if isValidId(adminId) && isAdmin();
+      allow write: if isValidId(adminId) && isAdmin();
+    }
+
+    // 4. Astrologer Directory - Only the matched astrologer or admin can inspect
+    match /astrologers/{astrologerId} {
+      allow get: if isValidId(astrologerId) && (request.auth.uid == astrologerId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isValidId(astrologerId) && isAdmin();
+    }
+
+    // 5. Customer Profile Records
+    match /customers/{customerId} {
+      allow get: if isValidId(customerId) && (request.auth.uid == customerId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(customerId) && (request.auth.uid == customerId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // 6. Consultation Sessions - Strictly protected for chat privacy
+    match /sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && (
+        isAdmin() || 
+        (isSignedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.assignedReaderId == request.auth.uid
+        ))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.assignedReaderId == request.auth.uid
+        )
+      );
+      allow create: if isValidId(sessionId) && isSignedIn() && (
+        request.resource.data.customerId == request.auth.uid || isAdmin()
+      );
+      allow update: if isValidId(sessionId) && (
+        isAdmin() || 
+        (isSignedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.assignedReaderId == request.auth.uid
+        ))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 7. Chat Messages - Only consultation participants can access
+    match /messages/{messageId} {
+      allow get, list: if isValidId(messageId) && (
+        isAdmin() || 
+        (isSignedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.senderId == request.auth.uid ||
+          resource.data.readerId == request.auth.uid
+        ))
+      );
+      allow create: if isValidId(messageId) && isSignedIn() && (
+        request.resource.data.senderId == request.auth.uid || isAdmin()
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // 8. Wallets - Strictly read-only for customer; balance writes ONLY via verified Admin/Server
+    match /wallets/{walletId} {
+      allow get: if isValidId(walletId) && (isOwner(walletId) || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // 9. Wallet Transactions - Immutable ledger, readable only by account owner or admin
+    match /wallet_transactions/{txId} {
+      allow get: if isValidId(txId) && (
+        resource.data.customerId == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() && resource.data.customerId == request.auth.uid
+      );
+      allow write: if isAdmin();
+    }
+
+    // 10. Reviews - Publicly viewable, create by authenticated author only
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isValidId(reviewId) && isSignedIn() && (
+        request.resource.data.userId == request.auth.uid
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // 11. Public Catalogs (Remedies, Spells, Products)
+    match /remedies/{remedyId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /spells/{spellId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /shop_products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 12. Admin Internal Settings & Activity Audit Logs
+    match /astro_settings/{settingId} {
+      allow read, write: if isValidId(settingId) && isAdmin();
+    }
+
+    match /activity_logs/{logId} {
+      allow read, write: if isValidId(logId) && isAdmin();
+    }
+  }
+}

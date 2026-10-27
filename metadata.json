@@ -1,0 +1,6 @@
+{
+  "name": "Astral & Sage UK",
+  "description": "Premium UK Spiritual Consultation Platform featuring verified psychics, tarot readers, Vedic specialists, Astroboard real-time routing, and your first chat free.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

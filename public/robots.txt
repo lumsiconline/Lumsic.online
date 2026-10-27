@@ -1,0 +1,10 @@
+# Robots.txt for LUMSIC Spiritual Platform
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /astrologer
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://lumsic.com/sitemap.xml
+Sitemap: https://ankushbhardwaj7838-droid.github.io/lumysic-psychic/sitemap.xml
