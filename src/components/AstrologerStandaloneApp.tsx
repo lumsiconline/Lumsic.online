@@ -4,7 +4,11 @@ import { AstroboardView } from './AstroboardView';
 import { AuthUserProfile } from '../lib/firebase';
 import { Reader } from '../types';
 
-export const AstrologerStandaloneApp: React.FC = () => {
+interface AstrologerStandaloneAppProps {
+  onBackToSite?: () => void;
+}
+
+export const AstrologerStandaloneApp: React.FC<AstrologerStandaloneAppProps> = ({ onBackToSite }) => {
   const [readers, setReaders] = useState<Reader[]>([]);
 
   useEffect(() => {
@@ -33,13 +37,15 @@ export const AstrologerStandaloneApp: React.FC = () => {
       .catch(console.error);
   };
 
+  const handleExit = onBackToSite || (() => {
+    window.location.href = '/';
+  });
+
   return (
-    <AstrologerAuthGuard>
-      {(profile: AuthUserProfile, matchedReader: Reader | null) => (
+    <AstrologerAuthGuard onBackToSite={handleExit}>
+      {(_profile: AuthUserProfile, _matchedReader: Reader | null) => (
         <AstroboardView
-          onBackToSite={() => {
-            window.location.reload();
-          }}
+          onBackToSite={handleExit}
           readers={readers}
           onToggleReaderOnline={handleToggleOnline}
         />

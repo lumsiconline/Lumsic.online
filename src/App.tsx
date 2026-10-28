@@ -73,7 +73,18 @@ export default function App() {
   const [isAstroboardView, setIsAstroboardView] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('astrologer') === 'true' || params.get('astroboard') === 'true' || window.location.pathname.includes('/astrologer')) {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (
+        params.get('astrologer') === 'true' ||
+        params.get('astroboard') === 'true' ||
+        params.get('panel') === 'astrologer' ||
+        path.includes('astrologer/lumsic.online') ||
+        hash.includes('astrologer/lumsic.online') ||
+        path.includes('/astrologer') ||
+        hash.includes('/astrologer') ||
+        hash.includes('astroboard')
+      ) {
         return true;
       }
     }

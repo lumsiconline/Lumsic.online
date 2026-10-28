@@ -56,7 +56,9 @@ import {
   Volume2,
   VolumeX,
   BellRing,
-  MessageCircle
+  MessageCircle,
+  Copy,
+  Link as LinkIcon
 } from 'lucide-react';
 import { VERIFIED_REVIEWS_POOL } from '../data/reviewsData';
 
@@ -131,6 +133,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   const [readerStatus, setReaderStatus] = useState<'online' | 'busy' | 'offline'>(() => {
     return currentAstrologer?.isOnline ? 'online' : 'offline';
   });
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Profile editing state
   const [editBio, setEditBio] = useState('');
@@ -817,6 +820,25 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           {/* Right Header: Authenticated Reader Profile + Status + Notification + Settings + Logout */}
           <div className="flex items-center gap-3">
             
+            {/* Direct Astrologer Link Badge */}
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+              <LinkIcon className="w-3.5 h-3.5 text-amber-600" />
+              <span className="font-mono text-amber-900 font-semibold text-[11px]">astrologer/lumsic.online</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lumsic.online';
+                  navigator.clipboard.writeText(`${origin}/astrologer/lumsic.online`);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="text-amber-700 hover:text-amber-900 font-bold transition cursor-pointer ml-1"
+                title="Copy direct astrologer link"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
             {/* Direct Admin link if available */}
             {onOpenAdmin && (
               <button

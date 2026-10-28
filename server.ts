@@ -6206,7 +6206,7 @@ async function setupApp() {
       res.redirect('/admin.html');
     }
   });
-  app.get(['/astrologer', '/astrologer.html'], (_req: Request, res: Response) => {
+  app.get(['/astrologer', '/astrologer.html', '/astrologer/lumsic.online', '/astrologer/lumsic.online/*'], (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist', 'astrologer.html'))) {
       res.sendFile(path.join(__dirname, 'dist', 'astrologer.html'));
     } else {
@@ -6224,7 +6224,7 @@ async function setupApp() {
     app.get(['/admin', '/admin.html', '/admin/lumsic.online', '/admin/lumsic.online/*'], (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, 'dist', 'admin.html'));
     });
-    app.get(['/astrologer', '/astrologer.html'], (_req: Request, res: Response) => {
+    app.get(['/astrologer', '/astrologer.html', '/astrologer/lumsic.online', '/astrologer/lumsic.online/*'], (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, 'dist', 'astrologer.html'));
     });
     app.get('*', (_req: Request, res: Response) => {
