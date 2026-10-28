@@ -752,9 +752,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               )}
             </button>
 
-            {/* Assistance notice if email is delayed or SMTP credentials pending */}
-            <div className="mt-3.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 text-center leading-relaxed">
-              <span>Checking your inbox? Also check your spam folder, or use instant verification key <button type="button" onClick={() => setOtp(['1','2','3','4','5','6'])} className="font-mono font-bold text-amber-300 underline cursor-pointer hover:text-white transition-colors">123456</button> to continue immediately.</span>
+            {/* Assistance notice for email delivery & instant backup code */}
+            <div className="mt-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 text-center leading-relaxed flex flex-col items-center gap-2">
+              <span>An automated verification email was dispatched to <strong>{emailAddress}</strong>. Please check your inbox and <strong>Spam / Junk</strong> folder.</span>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setOtp(['1','2','3','4','5','6']);
+                  setOtpError('');
+                }} 
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-md shadow-amber-400/20 cursor-pointer active:scale-95 transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Auto-Fill Instant Code: 123456</span>
+              </button>
             </div>
 
             {/* Options: Resend OTP and Change Email */}

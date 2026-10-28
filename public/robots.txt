@@ -6,5 +6,5 @@ Disallow: /astrologer
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://lumsic.com/sitemap.xml
-Sitemap: https://ankushbhardwaj7838-droid.github.io/lumysic-psychic/sitemap.xml
+Sitemap: https://lumsic.online/sitemap.xml
+Sitemap: https://lumsiconline.github.io/Lumsic.online/sitemap.xml

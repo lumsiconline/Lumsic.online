@@ -108,6 +108,22 @@ export interface UserProfileRecord {
 
 /**
 /**
+ * Helper to resolve the correct backend API URL across environments.
+ * If running on GitHub Pages (e.g. lumsiconline.github.io) or custom domain,
+ * this automatically routes API calls to the live Cloud Run backend server.
+ */
+export function getBackendApiUrl(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window === 'undefined') return cleanPath;
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('run.app')) {
+    return cleanPath;
+  }
+  const liveBackend = 'https://ais-pre-xia7bhme6juyfqryqodf6b-551171641031.asia-southeast1.run.app';
+  return `${liveBackend}${cleanPath}`;
+}
+
+/**
  * Send 6-digit numeric OTP to the user's email address.
  * Uses reliable server-authoritative engine with graceful fallback.
  */
@@ -120,13 +136,14 @@ export async function sendEmailOtp(
     return { success: false, error: 'Please enter a valid email address.' };
   }
 
-  // 1. Primary: Use our robust local backend OTP service
+  // 1. Primary: Use our robust backend OTP service
   try {
-    const res = await fetch('/api/auth/otp/send', {
+    const url = getBackendApiUrl('/api/auth/otp/send');
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        email: cleanEmail,
+        email: cleanEmail, 
         fullName: details?.fullName,
         phone: details?.phone
       })
@@ -179,7 +196,8 @@ export async function verifyEmailOtp(
 
   // 1. Primary: Verify through our server backend
   try {
-    const res = await fetch('/api/auth/otp/verify', {
+    const url = getBackendApiUrl('/api/auth/otp/verify');
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
