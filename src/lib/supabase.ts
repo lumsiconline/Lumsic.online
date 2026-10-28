@@ -320,3 +320,109 @@ export async function signOutUser(): Promise<{ error?: string }> {
     return { error: err?.message };
   }
 }
+
+/**
+ * Signup new user account with Name, Email, Phone, Password, and Confirm Password
+ */
+export async function signupWithPassword(params: {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+  country?: string;
+  countryCode?: string;
+  currency?: string;
+}): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
+  try {
+    const url = getBackendApiUrl('/api/auth/signup');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, user: data.user, session: data.session };
+    }
+    return { success: false, error: data.error || 'Signup failed. Please try again.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error during signup.' };
+  }
+}
+
+/**
+ * Log in existing user with Email and Password ONLY (NO OTP)
+ */
+export async function loginWithPassword(params: {
+  email: string;
+  password: string;
+}): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
+  try {
+    const url = getBackendApiUrl('/api/auth/login');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, user: data.user, session: data.session };
+    }
+    return { success: false, error: data.error || 'Invalid email or password.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error during login.' };
+  }
+}
+
+/**
+ * Request Password Reset OTP to registered email
+ */
+export async function requestForgotPasswordOtp(email: string): Promise<{
+  success: boolean;
+  message?: string;
+  otpCode?: string;
+  error?: string;
+}> {
+  try {
+    const url = getBackendApiUrl('/api/auth/forgot-password/request');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, message: data.message, otpCode: data.otpCode };
+    }
+    return { success: false, error: data.error || 'Failed to send password reset code.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error during password reset request.' };
+  }
+}
+
+/**
+ * Verify Reset OTP and Set New Password
+ */
+export async function resetPasswordWithOtp(params: {
+  email: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const url = getBackendApiUrl('/api/auth/forgot-password/reset');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, message: data.message };
+    }
+    return { success: false, error: data.error || 'Failed to reset password.' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error during password reset.' };
+  }
+}

@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, ChevronDown, Check, ArrowLeft, Sparkles, Shield, Phone, Mail, 
-  Globe, Lock, X, User, AlertCircle, Loader2, RefreshCw 
+  Globe, Lock, X, User, AlertCircle, Loader2, RefreshCw, Eye, EyeOff, KeyRound 
 } from 'lucide-react';
 import { COUNTRIES, CountryInfo, detectUserGeo } from '../utils/currency';
 import { CustomerProfile } from '../types';
 import { LumysicLogo } from './LumysicLogo';
 import { 
-  sendEmailOtp, 
-  verifyEmailOtp, 
-  upsertUserProfile, 
-  getUserProfile, 
-  isSupabaseConfigured 
+  signupWithPassword, 
+  loginWithPassword, 
+  requestForgotPasswordOtp, 
+  resetPasswordWithOtp 
 } from '../lib/supabase';
 import { auth, googleProvider } from '../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
@@ -34,19 +33,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLoginSuccess,
   onBackToSite,
   detectedGeo,
-  redirectTarget
+  redirectTarget = null
 }) => {
-  // Unified authentication redirect logic
+  // Session storage redirect recovery
   const [activeRedirect, setActiveRedirect] = useState<AuthRedirectTarget | null>(() => {
     if (redirectTarget) return redirectTarget;
     try {
       const stored = sessionStorage.getItem('lumysic_auth_redirect_target');
-      if (stored) return JSON.parse(stored);
-      if (typeof window !== 'undefined' && window.location.hash) {
-        const hash = window.location.hash;
-        if (hash.startsWith('#reader-')) {
-          return { profileId: hash.replace('#reader-', ''), profileType: 'reader' };
-        }
+      if (stored) {
+        return JSON.parse(stored);
       }
     } catch {}
     return null;
@@ -61,10 +56,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   }, [redirectTarget]);
 
-  // Form State
+  // Auth Mode: 'login' | 'signup' | 'forgot_request' | 'forgot_reset'
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot_request' | 'forgot_reset'>('login');
+
+  // Country selector
   const [selectedCountry, setSelectedCountry] = useState<CountryInfo>(
     detectedGeo || COUNTRIES.find(c => c.code === 'US') || COUNTRIES[0]
   );
+  const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+
+  // Form Fields
   const [fullName, setFullName] = useState(() => {
     return localStorage.getItem('lumysic_user_name') || localStorage.getItem('astral_customer_name') || '';
   });
@@ -76,79 +78,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     return saved.replace(/^\+\d+\s*/, '');
   });
 
-  // UI Flow State
-  // 'form' -> Enter Full Name, Phone (+ country code), and Email Address
-  // 'otp' -> 6-Digit Email OTP verification screen
-  // 'profile_completion' -> If an existing user logged in with missing name or phone
-  const [step, setStep] = useState<'form' | 'otp' | 'profile_completion'>('form');
-  const otpLength = 6;
-  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
+  // Password fields
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Forgot Password fields
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [activeOtpCode, setActiveOtpCode] = useState<string>('');
+
+  // Status & Feedback
   const [formError, setFormError] = useState('');
-  const [otpError, setOtpError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(60);
 
-  // Completed user context after OTP verification (for profile completion if needed)
-  const [authenticatedUserId, setAuthenticatedUserId] = useState<string>('');
-  const [activeOtpCode, setActiveOtpCode] = useState<string>('123456');
-
-  // Google 1-Click Authentication
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsLoading(true);
-      setFormError('');
-      const res = await signInWithPopup(auth, googleProvider);
-      const user = res.user;
-      const cleanEmail = (user.email || '').toLowerCase().trim();
-      const cleanName = user.displayName || cleanEmail.split('@')[0] || 'Valued Seeker';
-      const cleanPhone = user.phoneNumber || '';
-
-      localStorage.setItem('lumysic_is_logged_in', 'true');
-      localStorage.setItem('astral_is_logged_in', 'true');
-      localStorage.setItem('lumysic_user_email', cleanEmail);
-      localStorage.setItem('astral_customer_email', cleanEmail);
-      localStorage.setItem('lumysic_user_name', cleanName);
-      localStorage.setItem('astral_customer_name', cleanName);
-      if (cleanPhone) {
-        localStorage.setItem('lumysic_user_phone', cleanPhone);
-        localStorage.setItem('astral_customer_phone', cleanPhone);
-      }
-
-      try {
-        sessionStorage.removeItem('lumysic_auth_redirect_target');
-      } catch {}
-
-      onLoginSuccess({
-        id: user.uid,
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone || `${selectedCountry.dialCode} 0000000`,
-        country: selectedCountry.code,
-        countryCode: selectedCountry.dialCode,
-        currency: selectedCountry.currency,
-        isFirstTimeUser: false,
-        freeMinutesUsed: false,
-        totalConsultations: 0
-      }, activeRedirect);
-    } catch (err: any) {
-      console.warn('Google sign-in notice:', err);
-      if (err?.code !== 'auth/popup-closed-by-user') {
-        setFormError('Google Sign-In was cancelled or unavailable. Please use the verification form below.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Country selector modal
-  const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
-  const [countrySearch, setCountrySearch] = useState('');
-
-  // Ref array for 6 OTP boxes
-  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  // Auto-detect geo if not provided
+  // Auto-detect geo
   useEffect(() => {
     if (!detectedGeo) {
       detectUserGeo().then(geo => {
@@ -159,333 +108,279 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   }, [detectedGeo]);
 
-  // Resend Countdown Timer
-  useEffect(() => {
-    if (step === 'otp' && resendCountdown > 0) {
-      const timer = setTimeout(() => setResendCountdown(prev => prev - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [step, resendCountdown]);
-
+  // Filter countries for modal
   const filteredCountries = COUNTRIES.filter(c => 
-    c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-    c.dialCode.includes(countrySearch) ||
-    c.currency.toLowerCase().includes(countrySearch.toLowerCase())
+    c.name.toLowerCase().includes(countrySearch.toLowerCase().trim()) ||
+    c.dialCode.includes(countrySearch.trim()) ||
+    c.code.toLowerCase().includes(countrySearch.toLowerCase().trim())
   );
 
-  // Validate E.164 phone number format helper
-  const formatE164Phone = (dialCode: string, rawPhone: string) => {
-    const digitsOnly = rawPhone.replace(/\D/g, '');
-    const cleanDial = dialCode.replace(/\s+/g, '');
-    return `${cleanDial}${digitsOnly}`;
+  // Helper to persist session & notify parent
+  const handleAuthSuccess = (user: any) => {
+    const cleanEmail = (user.email || emailAddress).trim().toLowerCase();
+    const effectiveName = user.name || fullName || cleanEmail.split('@')[0] || 'Seeker';
+    const effectivePhone = user.phone || `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
+    const resolvedCurrency = selectedCountry.code === 'GB' || selectedCountry.dialCode === '+44' ? 'GBP' : 'USD';
+
+    localStorage.setItem('lumysic_is_logged_in', 'true');
+    localStorage.setItem('astral_is_logged_in', 'true');
+    localStorage.setItem('lumysic_user_email', cleanEmail);
+    localStorage.setItem('astral_customer_email', cleanEmail);
+    localStorage.setItem('lumysic_user_name', effectiveName);
+    localStorage.setItem('astral_customer_name', effectiveName);
+    localStorage.setItem('lumysic_user_phone', effectivePhone);
+    localStorage.setItem('astral_customer_phone', effectivePhone);
+    localStorage.setItem('astral_currency', resolvedCurrency);
+    localStorage.setItem('astral_country', selectedCountry.code);
+
+    try {
+      sessionStorage.removeItem('lumysic_auth_redirect_target');
+    } catch {}
+
+    onLoginSuccess({
+      id: user.id || 'usr_' + Date.now(),
+      name: effectiveName,
+      email: cleanEmail,
+      phone: effectivePhone,
+      country: selectedCountry.code,
+      countryCode: selectedCountry.dialCode,
+      currency: resolvedCurrency,
+      isFirstTimeUser: Boolean(user.isFirstTimeUser),
+      freeMinutesUsed: false,
+      totalConsultations: user.totalConsultations || 0
+    }, activeRedirect);
   };
 
   // =========================================================================
-  // 1. SEND REAL EMAIL OTP THROUGH SUPABASE AUTH
+  // 1. LOGIN WITH EMAIL & PASSWORD ONLY (NO OTP)
   // =========================================================================
-  const handleRequestEmailOtp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setFormError('');
     setStatusMessage('');
 
-    const cleanName = fullName.trim();
     const cleanEmail = emailAddress.trim().toLowerCase();
-    const cleanPhoneDigits = phoneNumber.replace(/\D/g, '');
+    const cleanPass = password.trim();
 
-    // Validation
-    if (!cleanName || cleanName.length < 2) {
-      setFormError('Please enter your full name (at least 2 letters).');
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setFormError('Please enter a valid email address.');
       return;
     }
 
-    if (!cleanPhoneDigits || cleanPhoneDigits.length < 7) {
-      setFormError('Please enter a valid mobile number (at least 7 digits).');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
-      setFormError('Please enter a valid email address (e.g. name@example.com).');
+    if (!cleanPass) {
+      setFormError('Please enter your password.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Real backend OTP call with seamless fallback
-      const result = await sendEmailOtp(cleanEmail, {
-        fullName: cleanName,
-        phone: `${selectedCountry.dialCode} ${phoneNumber.trim()}`
+      const result = await loginWithPassword({
+        email: cleanEmail,
+        password: cleanPass
       });
-
-      if (!result.success) {
-        setFormError(result.error || 'Failed to send verification code.');
-        setIsLoading(false);
-        return;
-      }
-
-      const code = result.otpCode || '123456';
-      setActiveOtpCode(code);
-
-      // Store in localStorage for persistence
-      localStorage.setItem('lumysic_user_email', cleanEmail);
-      localStorage.setItem('lumysic_user_name', cleanName);
-      localStorage.setItem('lumysic_user_phone', `${selectedCountry.dialCode} ${phoneNumber.trim()}`);
-
-      setIsLoading(false);
-      setStep('otp');
-      setResendCountdown(60);
-      setOtp(Array(otpLength).fill(''));
-      setOtpError('');
-      setStatusMessage(`Verification code dispatched. Check your email or use the cosmic code on screen.`);
-      
-      // Auto-focus first digit
-      setTimeout(() => {
-        otpInputRefs.current[0]?.focus();
-      }, 150);
-    } catch (err: any) {
-      setIsLoading(false);
-      setFormError(err?.message || 'Network error sending OTP. Please try again.');
-    }
-  };
-
-  // =========================================================================
-  // 2. RESEND EMAIL OTP
-  // =========================================================================
-  const handleResendOtp = async () => {
-    if (resendCountdown > 0 || isLoading) return;
-    setOtpError('');
-    setStatusMessage('');
-    setIsLoading(true);
-
-    const cleanEmail = emailAddress.trim().toLowerCase();
-    const result = await sendEmailOtp(cleanEmail, {
-      fullName: fullName.trim(),
-      phone: `${selectedCountry.dialCode} ${phoneNumber.trim()}`
-    });
-    setIsLoading(false);
-
-    if (result.success) {
-      const code = result.otpCode || '123456';
-      setActiveOtpCode(code);
-      setResendCountdown(60);
-      setStatusMessage(`New verification code dispatched.`);
-      setOtp(Array(otpLength).fill(''));
-      otpInputRefs.current[0]?.focus();
-    } else {
-      setOtpError(result.error || 'Could not resend OTP. Please wait a moment and try again.');
-    }
-  };
-
-  // =========================================================================
-  // 3. OTP DIGIT INPUT NAVIGATION (6 DIGITS)
-  // =========================================================================
-  const handleOtpChange = (index: number, val: string) => {
-    // Only accept numeric inputs
-    const numericChar = val.replace(/\D/g, '');
-    
-    // Support paste of entire 6-digit code
-    if (numericChar.length > 1) {
-      const pastedDigits = numericChar.slice(0, 6).split('');
-      const newOtp = ['', '', '', '', '', ''];
-      pastedDigits.forEach((d, i) => {
-        if (i < 6) newOtp[i] = d;
-      });
-      setOtp(newOtp);
-      const nextFocus = Math.min(pastedDigits.length, 5);
-      setTimeout(() => {
-        otpInputRefs.current[nextFocus]?.focus();
-      }, 50);
-      return;
-    }
-
-    const nextOtp = [...otp];
-    nextOtp[index] = numericChar;
-    setOtp(nextOtp);
-
-    // Auto-advance focus to next input
-    if (numericChar && index < otpLength - 1) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      if (!otp[index] && index > 0) {
-        otpInputRefs.current[index - 1]?.focus();
-      }
-    } else if (e.key === 'ArrowLeft' && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
-    } else if (e.key === 'ArrowRight' && index < otpLength - 1) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  // =========================================================================
-  // 4. VERIFY OTP WITH SUPABASE AUTH & SAVE PROFILE (RLS)
-  // =========================================================================
-  const handleVerifyOtp = async () => {
-    setOtpError('');
-    const fullOtp = otp.join('').trim();
-
-    if (fullOtp.length !== otpLength) {
-      setOtpError(`Please enter the full ${otpLength}-digit code sent to your email.`);
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const cleanEmail = emailAddress.trim().toLowerCase();
-      const result = await verifyEmailOtp(cleanEmail, fullOtp);
 
       if (!result.success || !result.user) {
         setIsLoading(false);
-        setOtpError(result.error || 'Invalid or expired verification code.');
+        setFormError(result.error || 'Invalid email or password.');
         return;
       }
-
-      const user = result.user;
-      setAuthenticatedUserId(user.id);
-
-      // Check if user already has a saved profile in Supabase
-      const existingProfile = await getUserProfile(user.id);
-
-      const effectiveFullName = fullName.trim() || existingProfile?.full_name || '';
-      const effectivePhone = phoneNumber.trim() 
-        ? formatE164Phone(selectedCountry.dialCode, phoneNumber) 
-        : existingProfile?.phone || '';
-
-      // If user profile is missing name or phone (e.g. returning user with incomplete profile)
-      if (!effectiveFullName || !effectivePhone) {
-        setIsLoading(false);
-        setStep('profile_completion');
-        return;
-      }
-
-      // Upsert profile in Supabase `profiles` table (Protected by RLS)
-      await upsertUserProfile({
-        id: user.id,
-        full_name: effectiveFullName,
-        phone: effectivePhone,
-        email: cleanEmail,
-        country_code: selectedCountry.dialCode,
-        country: selectedCountry.code,
-        currency: selectedCountry.currency
-      });
-
-      // Save customer session locally for Lumysic application
-      const resolvedCurrency = selectedCountry.code === 'GB' || selectedCountry.dialCode === '+44' ? 'GBP' : 'USD';
-      const formattedPhoneDisplay = `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
-
-      localStorage.setItem('astral_customer_id', user.id);
-      localStorage.setItem('astral_customer_name', effectiveFullName);
-      localStorage.setItem('lumysic_user_name', effectiveFullName);
-      localStorage.setItem('lumsic_user_name', effectiveFullName);
-      localStorage.setItem('astral_customer_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumysic_user_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumsic_user_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumysic_user_email', cleanEmail);
-      localStorage.setItem('astral_currency', resolvedCurrency);
-      localStorage.setItem('astral_country', selectedCountry.code);
-      localStorage.setItem('astral_is_logged_in', 'true');
-      localStorage.setItem('lumysic_is_logged_in', 'true');
-
-      // Clear redirect target from sessionStorage
-      try {
-        sessionStorage.removeItem('lumysic_auth_redirect_target');
-      } catch {}
 
       setIsLoading(false);
-
-      // Trigger login success with redirect target
-      onLoginSuccess({
-        id: user.id,
-        name: effectiveFullName,
-        email: cleanEmail,
-        phone: formattedPhoneDisplay,
-        country: selectedCountry.code,
-        countryCode: selectedCountry.dialCode,
-        currency: resolvedCurrency,
-        isFirstTimeUser: false,
-        freeMinutesUsed: false,
-        totalConsultations: 0
-      }, activeRedirect);
-
+      handleAuthSuccess(result.user);
     } catch (err: any) {
       setIsLoading(false);
-      setOtpError(err?.message || 'An error occurred during verification. Please try again.');
+      setFormError(err?.message || 'Login failed. Please check your credentials and try again.');
     }
   };
 
   // =========================================================================
-  // 5. PROFILE COMPLETION SUBMISSION (FOR INCOMPLETE PROFILES)
+  // 2. SIGNUP WITH NAME, EMAIL, PHONE, PASSWORD & CONFIRM PASSWORD
   // =========================================================================
-  const handleSaveProfileCompletion = async (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    setStatusMessage('');
 
     const cleanName = fullName.trim();
+    const cleanEmail = emailAddress.trim().toLowerCase();
     const cleanPhoneDigits = phoneNumber.replace(/\D/g, '');
+    const cleanPass = password.trim();
+    const cleanConfirm = confirmPassword.trim();
 
     if (!cleanName || cleanName.length < 2) {
       setFormError('Please enter your full name (at least 2 letters).');
       return;
     }
 
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setFormError('Please enter a valid email address.');
+      return;
+    }
+
     if (!cleanPhoneDigits || cleanPhoneDigits.length < 7) {
-      setFormError('Please enter a valid mobile number.');
+      setFormError('Please enter a valid contact number (at least 7 digits).');
+      return;
+    }
+
+    if (!cleanPass || cleanPass.length < 6) {
+      setFormError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (cleanPass !== cleanConfirm) {
+      setFormError('Passwords do not match. Please re-enter.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const cleanEmail = emailAddress.trim().toLowerCase();
-      const formattedE164 = formatE164Phone(selectedCountry.dialCode, phoneNumber);
-      const formattedPhoneDisplay = `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
-      const resolvedCurrency = selectedCountry.code === 'GB' || selectedCountry.dialCode === '+44' ? 'GBP' : 'USD';
-
-      await upsertUserProfile({
-        id: authenticatedUserId,
-        full_name: cleanName,
-        phone: formattedE164,
+      const result = await signupWithPassword({
+        name: cleanName,
         email: cleanEmail,
-        country_code: selectedCountry.dialCode,
+        phone: `${selectedCountry.dialCode} ${phoneNumber.trim()}`,
+        password: cleanPass,
+        confirmPassword: cleanConfirm,
         country: selectedCountry.code,
+        countryCode: selectedCountry.dialCode,
         currency: selectedCountry.currency
       });
 
-      localStorage.setItem('astral_customer_id', authenticatedUserId);
-      localStorage.setItem('astral_customer_name', cleanName);
-      localStorage.setItem('lumysic_user_name', cleanName);
-      localStorage.setItem('lumsic_user_name', cleanName);
-      localStorage.setItem('astral_customer_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumysic_user_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumsic_user_phone', formattedPhoneDisplay);
-      localStorage.setItem('lumysic_user_email', cleanEmail);
-      localStorage.setItem('astral_currency', resolvedCurrency);
-      localStorage.setItem('astral_country', selectedCountry.code);
-      localStorage.setItem('astral_is_logged_in', 'true');
-      localStorage.setItem('lumysic_is_logged_in', 'true');
+      if (!result.success || !result.user) {
+        setIsLoading(false);
+        setFormError(result.error || 'Signup failed. Please try again.');
+        return;
+      }
 
       setIsLoading(false);
-
-      onLoginSuccess({
-        id: authenticatedUserId,
-        name: cleanName,
-        email: cleanEmail,
-        phone: formattedPhoneDisplay,
-        country: selectedCountry.code,
-        countryCode: selectedCountry.dialCode,
-        currency: resolvedCurrency,
-        isFirstTimeUser: false,
-        freeMinutesUsed: false,
-        totalConsultations: 0
-      }, activeRedirect);
+      handleAuthSuccess(result.user);
     } catch (err: any) {
       setIsLoading(false);
-      setFormError(err?.message || 'Failed to update profile. Please try again.');
+      setFormError(err?.message || 'Network error during signup. Please try again.');
+    }
+  };
+
+  // =========================================================================
+  // 3. FORGOT PASSWORD: STEP 1 - REQUEST OTP VIA EMAIL
+  // =========================================================================
+  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    setStatusMessage('');
+
+    const cleanEmail = emailAddress.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setFormError('Please enter your registered email address.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await requestForgotPasswordOtp(cleanEmail);
+      setIsLoading(false);
+
+      if (!result.success) {
+        setFormError(result.error || 'No account found with this email address.');
+        return;
+      }
+
+      if (result.otpCode) {
+        setActiveOtpCode(result.otpCode);
+      }
+      setMode('forgot_reset');
+      setStatusMessage(`A 6-digit verification code has been dispatched to ${cleanEmail}.`);
+    } catch (err: any) {
+      setIsLoading(false);
+      setFormError(err?.message || 'Failed to send password reset code.');
+    }
+  };
+
+  // =========================================================================
+  // 4. FORGOT PASSWORD: STEP 2 - VERIFY OTP & RESET PASSWORD
+  // =========================================================================
+  const handleForgotPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    setStatusMessage('');
+
+    const cleanEmail = emailAddress.trim().toLowerCase();
+    const cleanOtp = resetOtp.trim();
+    const cleanNewPass = newPassword.trim();
+    const cleanConfirmNewPass = confirmNewPassword.trim();
+
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setFormError('Please enter the 6-digit verification code sent to your email.');
+      return;
+    }
+
+    if (!cleanNewPass || cleanNewPass.length < 6) {
+      setFormError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (cleanNewPass !== cleanConfirmNewPass) {
+      setFormError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await resetPasswordWithOtp({
+        email: cleanEmail,
+        otp: cleanOtp,
+        newPassword: cleanNewPass,
+        confirmPassword: cleanConfirmNewPass
+      });
+
+      setIsLoading(false);
+
+      if (!result.success) {
+        setFormError(result.error || 'Invalid or expired verification code.');
+        return;
+      }
+
+      setPassword('');
+      setConfirmPassword('');
+      setResetOtp('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setMode('login');
+      setStatusMessage('Password reset successfully! Please log in with your new password.');
+    } catch (err: any) {
+      setIsLoading(false);
+      setFormError(err?.message || 'Failed to reset password. Please try again.');
+    }
+  };
+
+  // =========================================================================
+  // 5. GOOGLE 1-CLICK AUTHENTICATION
+  // =========================================================================
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      setFormError('');
+      const res = await signInWithPopup(auth, googleProvider);
+      const user = res.user;
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      const cleanName = user.displayName || cleanEmail.split('@')[0] || 'Valued Seeker';
+      const cleanPhone = user.phoneNumber || '';
+
+      handleAuthSuccess({
+        id: user.uid,
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone || `${selectedCountry.dialCode} 0000000`
+      });
+    } catch (err: any) {
+      console.warn('Google sign-in notice:', err);
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        setFormError('Google Sign-In was cancelled or unavailable.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -499,18 +394,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       {/* Top Header */}
       <div className="w-full max-w-md flex items-center justify-between relative z-10 pt-2">
-        {step === 'otp' ? (
+        {mode !== 'login' && mode !== 'signup' ? (
           <button
             type="button"
             onClick={() => {
-              setStep('form');
-              setOtpError('');
+              setMode('login');
+              setFormError('');
               setStatusMessage('');
             }}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Change Email</span>
+            <span>Back to Login</span>
           </button>
         ) : onBackToSite ? (
           <button
@@ -572,7 +467,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <span className="h-[1px] w-8 sm:w-12 bg-gradient-to-l from-transparent to-[#F6D06E]/70" />
           </div>
 
-          <p className="text-xs sm:text-sm text-[#FCE38A]/85 mt-2 mb-3 text-center font-medium tracking-wide">
+          <p className="text-xs sm:text-sm text-[#FCE38A]/85 mt-2 mb-4 text-center font-medium tracking-wide">
             Discover Your Cosmic Path &amp; Spiritual Guidance
           </p>
 
@@ -590,388 +485,566 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           )}
         </div>
 
-        {/* =========================================================================
-            STEP 1: LOGIN / SIGNUP WITH FULL NAME, MOBILE & EMAIL ADDRESS
-        ========================================================================= */}
-        {step === 'form' && (
-          <div className="w-full bg-[#0D1536]/90 border border-indigo-900/60 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl">
-            {/* Google One-Click Sign In Button */}
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={isLoading}
-              className="w-full mb-4 py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-[0.99] border border-slate-200"
-            >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <span>Continue with Google (1-Click Login)</span>
-            </button>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 mb-5">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-xs text-slate-300 font-semibold tracking-wide flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-[#F6D06E]" />
-                <span>Or Log In with Email &amp; Mobile</span>
-              </span>
-              <div className="flex-1 h-px bg-white/10" />
+        {/* MAIN CARD */}
+        <div className="w-full bg-[#0D1536]/90 border border-indigo-900/60 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl">
+          
+          {/* Status Message (e.g. password reset success) */}
+          {statusMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{statusMessage}</span>
             </div>
+          )}
 
-            {formError && (
-              <div className="mb-4 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-start gap-2.5 animate-in fade-in leading-relaxed text-left">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <span className="flex-1">{formError}</span>
-              </div>
-            )}
+          {/* Error Notice */}
+          {formError && (
+            <div className="mb-4 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-start gap-2.5 animate-in fade-in leading-relaxed text-left">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span className="flex-1">{formError}</span>
+            </div>
+          )}
 
-            {/* Form Fields: Full Name, Mobile Number, Email */}
-            <form onSubmit={handleRequestEmailOtp} className="space-y-4">
-              {/* 1. Full Name */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-[#F6D06E]" />
-                    <span>Full Name</span>
-                  </span>
-                  <span className="text-[10px] text-amber-300/80 font-normal">Required for readings</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => {
-                      setFullName(e.target.value);
-                      if (formError) setFormError('');
-                    }}
-                    placeholder="Enter your full name"
-                    autoFocus
-                    required
-                    className="w-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white placeholder-slate-400 text-sm font-medium transition-all shadow-inner"
-                  />
-                </div>
+          {/* =========================================================================
+              VIEW A: LOGIN FORM (EMAIL & PASSWORD ONLY)
+          ========================================================================= */}
+          {mode === 'login' && (
+            <div>
+              {/* Login / Signup Tabs */}
+              <div className="flex rounded-2xl bg-[#141E47] p-1 mb-5 border border-indigo-800/80">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setFormError(''); }}
+                  className="flex-1 py-2 text-xs font-bold rounded-xl transition-all bg-gradient-to-r from-[#F6D06E] to-[#E5B744] text-slate-950 shadow-md"
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setFormError(''); }}
+                  className="flex-1 py-2 text-xs font-bold rounded-xl transition-all text-slate-300 hover:text-white"
+                >
+                  Sign Up
+                </button>
               </div>
 
-              {/* 2. Mobile Number (with Country Code Selector for USA +1, UK +44, etc.) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-[#F6D06E]" />
-                    <span>Mobile Number</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Profile record only (No SMS code)</span>
-                </label>
-                <div className="flex items-stretch gap-2">
-                  {/* Country Picker Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsCountryPickerOpen(true)}
-                    className="flex items-center gap-2 px-3 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 hover:border-amber-400/50 text-white font-semibold text-sm transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
-                    title="Change Country Code"
-                  >
-                    <span className="text-lg leading-none">{selectedCountry.flag}</span>
-                    <span className="font-mono text-xs">{selectedCountry.dialCode}</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  </button>
+              {/* Google 1-Click Login */}
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+                className="w-full mb-4 py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-[0.99] border border-slate-200"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Continue with Google</span>
+              </button>
 
-                  {/* Phone input */}
-                  <div className="flex-1 relative">
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => {
-                        setPhoneNumber(e.target.value);
-                        if (formError) setFormError('');
-                      }}
-                      placeholder={selectedCountry.code === 'US' ? 'e.g. 555 123 4567' : 'e.g. 7911 123456'}
-                      required
-                      className="w-full h-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white placeholder-slate-400 text-sm font-medium transition-all shadow-inner"
-                    />
-                  </div>
-                </div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-[11px] text-slate-400 font-medium">Or enter credentials</span>
+                <div className="flex-1 h-px bg-white/10" />
               </div>
 
-              {/* 3. Email Address Field */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
+              {/* Login Form: Email and Password Only */}
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                {/* Email Address */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-[#F6D06E]" />
                     <span>Email Address</span>
-                  </span>
-                  <span className="text-[10px] text-amber-300/90 font-medium">OTP Code Destination</span>
-                </label>
-                <div className="relative">
+                  </label>
                   <input
                     type="email"
                     value={emailAddress}
-                    onChange={(e) => {
-                      setEmailAddress(e.target.value);
-                      if (formError) setFormError('');
-                    }}
-                    placeholder="e.g. seeker@example.com"
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
                     required
-                    className="w-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white placeholder-slate-400 text-sm font-medium transition-all shadow-inner"
+                    disabled={isLoading}
+                    className="w-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
                   />
                 </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-[#F6D06E]" />
+                      <span>Password</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setMode('forgot_request'); setFormError(''); setStatusMessage(''); }}
+                      className="text-[11px] text-[#F6D06E] hover:underline cursor-pointer font-medium"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      required
+                      disabled={isLoading}
+                      className="w-full pl-4 pr-11 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300 mt-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
+                      <span>Logging in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 fill-gray-950" />
+                      <span>Log In</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Bottom toggle link */}
+              <div className="text-center mt-5 pt-4 border-t border-white/10 text-xs text-slate-400">
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setFormError(''); }}
+                  className="text-[#F6D06E] font-bold hover:underline cursor-pointer"
+                >
+                  Sign Up
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              VIEW B: SIGNUP FORM (NAME, EMAIL, CONTACT NUMBER, PASSWORD, CONFIRM PASS)
+          ========================================================================= */}
+          {mode === 'signup' && (
+            <div>
+              {/* Login / Signup Tabs */}
+              <div className="flex rounded-2xl bg-[#141E47] p-1 mb-5 border border-indigo-800/80">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setFormError(''); }}
+                  className="flex-1 py-2 text-xs font-bold rounded-xl transition-all text-slate-300 hover:text-white"
+                >
+                  Log In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setFormError(''); }}
+                  className="flex-1 py-2 text-xs font-bold rounded-xl transition-all bg-gradient-to-r from-[#F6D06E] to-[#E5B744] text-slate-950 shadow-md"
+                >
+                  Sign Up
+                </button>
               </div>
 
-              {/* Clear Privacy Notice */}
-              <div className="p-3 rounded-xl bg-white/[0.04] border border-white/5 text-[11px] text-slate-300 leading-relaxed flex items-start gap-2">
-                <Lock className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
-                <p>
-                  <strong className="text-white">Privacy Notice:</strong> Your email is strictly used for secure numeric OTP account verification, receipts, and order updates. We will never share or sell your details.
+              <form onSubmit={handleSignupSubmit} className="space-y-3.5">
+                {/* 1. Full Name */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-[#F6D06E]" />
+                      <span>Full Name</span>
+                    </span>
+                    <span className="text-[10px] text-amber-300/80 font-normal">For consultations</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Eleanor Vance"
+                    autoComplete="name"
+                    required
+                    disabled={isLoading}
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                  />
+                </div>
+
+                {/* 2. Email Address */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>Email Address</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                    required
+                    disabled={isLoading}
+                    className="w-full px-4 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                  />
+                </div>
+
+                {/* 3. Contact Number with Country Selector */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-[#F6D06E]" />
+                      <span>Contact Number</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">With country code</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsCountryPickerOpen(true)}
+                      disabled={isLoading}
+                      className="px-3 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 hover:border-[#F6D06E] text-white font-semibold text-xs sm:text-sm shrink-0 flex items-center gap-1.5 transition-all cursor-pointer shadow-inner disabled:opacity-50"
+                    >
+                      <span className="text-base leading-none">{selectedCountry.flag}</span>
+                      <span className="font-mono text-xs">{selectedCountry.dialCode}</span>
+                      <ChevronDown className="w-3 h-3 text-slate-400" />
+                    </button>
+                    <input
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="e.g. 7123456789"
+                      autoComplete="tel"
+                      required
+                      disabled={isLoading}
+                      className="flex-1 px-4 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Password */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>Password</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      autoComplete="new-password"
+                      required
+                      disabled={isLoading}
+                      className="w-full pl-4 pr-11 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Confirm Password */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>Confirm Password</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      autoComplete="new-password"
+                      required
+                      disabled={isLoading}
+                      className="w-full pl-4 pr-11 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300 mt-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 fill-gray-950" />
+                      <span>Create Account</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Bottom toggle link */}
+              <div className="text-center mt-5 pt-4 border-t border-white/10 text-xs text-slate-400">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setFormError(''); }}
+                  className="text-[#F6D06E] font-bold hover:underline cursor-pointer"
+                >
+                  Log In
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              VIEW C: FORGOT PASSWORD - STEP 1 (REQUEST OTP)
+          ========================================================================= */}
+          {mode === 'forgot_request' && (
+            <div>
+              <div className="text-center mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  Forgot Password?
+                </h3>
+                <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto">
+                  Enter your registered email address and we'll send you a 6-digit verification code to reset your password.
                 </p>
               </div>
 
-              {/* Primary Submit Button: "Continue with Email OTP" */}
-              <button
-                type="submit"
-                disabled={isLoading || !fullName.trim() || !phoneNumber.trim() || !emailAddress.trim()}
-                className="w-full mt-2 py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
-                    <span>Sending Verification Code...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 fill-gray-950" />
-                    <span>Continue with Email OTP</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* =========================================================================
-            STEP 2: 6-DIGIT REAL EMAIL OTP VERIFICATION SCREEN
-        ========================================================================= */}
-        {step === 'otp' && (
-          <div className="w-full bg-[#0D1536]/90 border border-indigo-900/60 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
-            {/* Header info */}
-            <div className="text-center mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <Mail className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-white tracking-tight">
-                Enter Verification Code
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-sm mx-auto">
-                We sent a verification code to{' '}
-                <span className="font-semibold text-[#F6D06E] break-all">
-                  {emailAddress}
-                </span>
-              </p>
-            </div>
-
-            {/* Status notice */}
-            {statusMessage && (
-              <div className="mb-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs font-medium text-center animate-in fade-in">
-                {statusMessage}
-              </div>
-            )}
-
-            {/* Error notice */}
-            {otpError && (
-              <div className="mb-3 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold text-center animate-in fade-in flex items-center justify-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{otpError}</span>
-              </div>
-            )}
-
-            {/* Cosmic Verification Code Display Card */}
-            <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border border-amber-400/40 text-center shadow-lg">
-              <div className="flex items-center justify-center gap-1.5 text-xs text-amber-300 font-bold mb-1">
-                <Sparkles className="w-3.5 h-3.5 fill-amber-300" />
-                <span>Verification Code</span>
-              </div>
-              <div className="flex items-center justify-center gap-3 my-2">
-                <span className="font-mono text-3xl font-extrabold tracking-widest text-[#F6D06E] drop-shadow-sm select-all">
-                  {activeOtpCode || '123456'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const digits = (activeOtpCode || '123456').split('');
-                    setOtp(digits);
-                    setOtpError('');
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F6D06E] to-[#E5B744] hover:brightness-110 active:scale-95 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 cursor-pointer flex items-center gap-1.5 transition-all"
-                >
-                  <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
-                  <span>Auto-Fill Code</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Also dispatched to <strong className="text-amber-200">{emailAddress}</strong> (check Inbox &amp; Spam).
-              </p>
-            </div>
-
-            {/* OTP Input Boxes (6 digits) */}
-            <div className="flex justify-center gap-2 sm:gap-2.5 my-5">
-              {otp.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => { otpInputRefs.current[idx] = el; }}
-                  id={`email-otp-input-${idx}`}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  disabled={isLoading}
-                  autoComplete="one-time-code"
-                  className="w-11 sm:w-12 h-13 sm:h-14 text-center text-xl sm:text-2xl font-bold font-mono rounded-xl sm:rounded-2xl bg-[#141E47] border-2 border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white transition-all shadow-inner disabled:opacity-50"
-                />
-              ))}
-            </div>
-
-            {/* Verify Button */}
-            <button
-              type="button"
-              onClick={handleVerifyOtp}
-              disabled={isLoading || otp.join('').length !== otpLength}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
-                  <span>Verifying Code...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 fill-gray-950" />
-                  <span>Verify & Login</span>
-                </>
-              )}
-            </button>
-
-            {/* Assistance notice for email delivery & instant backup code */}
-            <div className="mt-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 text-center leading-relaxed flex flex-col items-center gap-2">
-              <span>An automated verification email was dispatched to <strong>{emailAddress}</strong>. Please check your inbox and <strong>Spam / Junk</strong> folder.</span>
-              <button 
-                type="button" 
-                onClick={() => {
-                  setOtp(['1','2','3','4','5','6']);
-                  setOtpError('');
-                }} 
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-md shadow-amber-400/20 cursor-pointer active:scale-95 transition-all"
-              >
-                <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
-                <span>Auto-Fill Instant Code: 123456</span>
-              </button>
-            </div>
-
-            {/* Options: Resend OTP and Change Email */}
-            <div className="flex items-center justify-between mt-5 pt-4 border-t border-white/10 text-xs text-slate-400">
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('form');
-                  setOtpError('');
-                  setStatusMessage('');
-                }}
-                className="text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <ArrowLeft className="w-3 h-3" />
-                <span>Change Email</span>
-              </button>
-
-              <div>
-                {resendCountdown > 0 ? (
-                  <span>Resend in <b className="text-amber-300 font-mono">{resendCountdown}s</b></span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={isLoading}
-                    className="text-[#F6D06E] font-bold hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Resend OTP</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* =========================================================================
-            STEP 3: PROFILE COMPLETION (FOR RETURNING USERS MISSING NAME/PHONE)
-        ========================================================================= */}
-        {step === 'profile_completion' && (
-          <div className="w-full bg-[#0D1536]/90 border border-indigo-900/60 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl animate-in fade-in">
-            <div className="text-center mb-5">
-              <h3 className="text-lg font-bold text-white tracking-tight">
-                Complete Your Profile
-              </h3>
-              <p className="text-xs text-slate-300 mt-1">
-                Your email is verified! Please provide your name and contact number for your psychic consultations.
-              </p>
-            </div>
-
-            {formError && (
-              <div className="mb-4 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold text-center">
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleSaveProfileCompletion} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Full Name</label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter your full name"
-                  required
-                  className="w-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Mobile Number</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsCountryPickerOpen(true)}
-                    className="px-3 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 text-white font-semibold text-sm shrink-0 flex items-center gap-1"
-                  >
-                    <span>{selectedCountry.flag}</span>
-                    <span className="font-mono text-xs">{selectedCountry.dialCode}</span>
-                  </button>
+              <form onSubmit={handleForgotPasswordRequest} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>Registered Email Address</span>
+                  </label>
                   <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="Enter contact number"
+                    type="email"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
                     required
-                    className="flex-1 px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm"
+                    disabled={isLoading}
+                    className="w-full px-4 py-3 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
                   />
                 </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
+                      <span>Sending Reset Code...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4" />
+                      <span>Send Reset Code</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="text-center mt-5 pt-4 border-t border-white/10 text-xs text-slate-400">
+                Remember your password?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setFormError(''); }}
+                  className="text-[#F6D06E] font-bold hover:underline cursor-pointer"
+                >
+                  Back to Log In
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              VIEW D: FORGOT PASSWORD - STEP 2 (ENTER OTP & SET NEW PASSWORD)
+          ========================================================================= */}
+          {mode === 'forgot_reset' && (
+            <div>
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  Reset Password
+                </h3>
+                <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto">
+                  Enter the 6-digit code sent to{' '}
+                  <span className="font-semibold text-[#F6D06E] break-all">{emailAddress}</span> and set your new password.
+                </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 text-gray-950 font-bold text-sm shadow-xl shadow-amber-500/20"
-              >
-                {isLoading ? 'Saving Profile...' : 'Save Profile & Continue'}
-              </button>
-            </form>
-          </div>
-        )}
+              {/* Instant Verification Code Card (if email delayed by filters) */}
+              {activeOtpCode && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border border-amber-400/40 text-center shadow-lg">
+                  <div className="flex items-center justify-center gap-1 text-[11px] text-amber-300 font-bold mb-1">
+                    <Sparkles className="w-3 h-3 fill-amber-300" />
+                    <span>Reset Verification Code</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 my-1">
+                    <span className="font-mono text-2xl font-extrabold tracking-widest text-[#F6D06E]">
+                      {activeOtpCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setResetOtp(activeOtpCode)}
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] shadow-xs cursor-pointer active:scale-95 transition-all"
+                    >
+                      Auto-Fill
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Also sent to your email (check inbox and spam folder)
+                  </p>
+                </div>
+              )}
+
+              <form onSubmit={handleForgotPasswordReset} className="space-y-3.5">
+                {/* 6-Digit OTP */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>6-Digit Verification Code</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={resetOtp}
+                    onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter 6-digit code"
+                    required
+                    disabled={isLoading}
+                    className="w-full px-4 py-2.5 text-center font-mono tracking-widest text-lg font-bold rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white placeholder:text-slate-500 placeholder:tracking-normal placeholder:font-sans placeholder:text-sm transition-all shadow-inner disabled:opacity-50"
+                  />
+                </div>
+
+                {/* New Password */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>New Password</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      autoComplete="new-password"
+                      required
+                      disabled={isLoading}
+                      className="w-full pl-4 pr-11 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#F6D06E]" />
+                    <span>Confirm New Password</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmNewPassword ? 'text' : 'password'}
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      autoComplete="new-password"
+                      required
+                      disabled={isLoading}
+                      className="w-full pl-4 pr-11 py-2.5 rounded-2xl bg-[#141E47] border border-indigo-800/80 focus:border-[#F6D06E] focus:outline-none text-white text-sm placeholder:text-slate-500 transition-all shadow-inner disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showConfirmNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.99] disabled:opacity-50 text-gray-950 font-bold text-sm sm:text-base shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-300 mt-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-950" />
+                      <span>Updating Password...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 text-gray-950" />
+                      <span>Reset Password &amp; Log In</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="text-center mt-5 pt-4 border-t border-white/10 text-xs text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setFormError(''); }}
+                  className="text-[#F6D06E] font-bold hover:underline cursor-pointer"
+                >
+                  Back to Log In
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
 
       {/* Footer Terms */}
       <div className="relative z-10 text-center text-[11px] text-slate-400 max-w-sm px-4 pt-4">
-        Protected by Supabase Authentication &amp; 256-bit encryption. By continuing, you agree to our{' '}
+        Protected by 256-bit encryption. By continuing, you agree to our{' '}
         <span className="text-slate-300 underline cursor-pointer hover:text-white">Terms of Use</span> &amp;{' '}
         <span className="text-slate-300 underline cursor-pointer hover:text-white">Privacy Policy</span>.
       </div>
