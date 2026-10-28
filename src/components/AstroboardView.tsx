@@ -52,7 +52,11 @@ import {
   Edit3,
   HelpCircle,
   Briefcase,
-  ChevronDown
+  ChevronDown,
+  Volume2,
+  VolumeX,
+  BellRing,
+  MessageCircle
 } from 'lucide-react';
 import { VERIFIED_REVIEWS_POOL } from '../data/reviewsData';
 
@@ -160,7 +164,68 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   // Tools Tab subviews
   const [toolsSubView, setToolsSubView] = useState<string | null>(null);
 
+  // Incoming Chat Screen Pop & Marimba Ringtone Audio
+  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isRingtoneMuted, setIsRingtoneMuted] = useState(false);
+  const [incomingAlertSession, setIncomingAlertSession] = useState<ConsultationSession | null>(null);
+  const seenSessionIdsRef = useRef<Set<string>>(new Set());
+  const dismissedSessionIdsRef = useRef<Set<string>>(new Set());
+  const initialSessionsLoadedRef = useRef(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Play marimba waiting ringtone on loop
+  const playRingtone = () => {
+    if (isRingtoneMuted || !ringtoneAudioRef.current) return;
+    try {
+      ringtoneAudioRef.current.currentTime = 0;
+      ringtoneAudioRef.current.loop = true;
+      const promise = ringtoneAudioRef.current.play();
+      if (promise !== undefined) {
+        promise.catch(err => {
+          console.warn('Audio play restricted by browser autoplay policy:', err);
+        });
+      }
+    } catch (e) {
+      console.warn('Audio play error:', e);
+    }
+  };
+
+  const stopRingtone = () => {
+    if (ringtoneAudioRef.current) {
+      ringtoneAudioRef.current.pause();
+      ringtoneAudioRef.current.currentTime = 0;
+    }
+  };
+
+  // Sync ringtone audio playback with screen pop alert
+  useEffect(() => {
+    if (incomingAlertSession && !isRingtoneMuted) {
+      playRingtone();
+    } else {
+      stopRingtone();
+    }
+    return () => {
+      stopRingtone();
+    };
+  }, [incomingAlertSession, isRingtoneMuted]);
+
+  // Unlock browser audio on first user touch/click
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (ringtoneAudioRef.current) {
+        ringtoneAudioRef.current.load();
+      }
+    };
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
 
   // Sync profile form state when currentAstrologer changes
   useEffect(() => {
@@ -213,6 +278,26 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           const updated = data.sessions.find((s: ConsultationSession) => s.id === current.id);
           return updated || current;
         });
+
+        // Detect newly landing incoming chat
+        if (!initialSessionsLoadedRef.current) {
+          data.sessions.forEach((s: ConsultationSession) => {
+            seenSessionIdsRef.current.add(s.id);
+          });
+          initialSessionsLoadedRef.current = true;
+        } else {
+          const incomingCandidate = data.sessions.find((s: ConsultationSession) => {
+            if (dismissedSessionIdsRef.current.has(s.id)) return false;
+            const isPending = (s.status as string) === 'pending' || s.status === 'waiting';
+            const isNewUnseen = !seenSessionIdsRef.current.has(s.id);
+            return isPending || isNewUnseen;
+          });
+
+          if (incomingCandidate && !incomingAlertSession) {
+            seenSessionIdsRef.current.add(incomingCandidate.id);
+            setIncomingAlertSession(incomingCandidate);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to fetch sessions:', err);
@@ -343,6 +428,82 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     } catch (err) {
       console.error('Failed to decline chat:', err);
     }
+  };
+
+  // Accept chat consultation from incoming screen pop modal
+  const handleAcceptIncomingAlert = async () => {
+    if (!incomingAlertSession) return;
+    const sessionToAccept = incomingAlertSession;
+    stopRingtone();
+    setIncomingAlertSession(null);
+    await handleAcceptChat(sessionToAccept);
+    setActiveNav('chats');
+  };
+
+  // Decline chat consultation from incoming screen pop modal
+  const handleDeclineIncomingAlert = async () => {
+    if (!incomingAlertSession) return;
+    const sessionToDecline = incomingAlertSession;
+    stopRingtone();
+    dismissedSessionIdsRef.current.add(sessionToDecline.id);
+    setIncomingAlertSession(null);
+    await handleDeclineChat(sessionToDecline.id);
+  };
+
+  // Helper to resolve the astrologer chosen by the user
+  const getChosenAstrologerDetails = (session: ConsultationSession) => {
+    const targetReaderId = session.requestedReaderId || session.assignedReaderId;
+    const targetReaderName = session.requestedReaderName || session.assignedReaderName;
+
+    const matchedReader = readers.find(r => 
+      (targetReaderId && (r.id === targetReaderId || r.astroId === targetReaderId)) ||
+      (targetReaderName && r.name.toLowerCase() === targetReaderName.toLowerCase())
+    ) || currentAstrologer || readers[0];
+
+    return {
+      id: matchedReader?.id || targetReaderId || 'reader-1',
+      name: targetReaderName || matchedReader?.name || 'Selected Astrologer',
+      title: matchedReader?.title || 'Verified Spiritual Guide',
+      category: matchedReader?.category || 'Psychic & Intuitive',
+      image: matchedReader?.avatar || matchedReader?.image_url || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+      rating: matchedReader?.rating || 4.98
+    };
+  };
+
+  // Test simulation trigger for astrologer/operator to test ringtone and screen pop
+  const handleTestIncomingAlert = () => {
+    const chosenReader = currentAstrologer || readers[0];
+    const testSession: ConsultationSession = {
+      id: 'test_alert_' + Date.now(),
+      customerId: 'cust_sample_ankush',
+      customerName: 'ankush',
+      readingType: 'Live Chat Consultation',
+      topic: 'Love, Relationship & Career Guidance',
+      initialQuestion: 'Hello, I need some clarity today regarding my life path and relationship.',
+      birthDetails: {
+        name: 'ankush',
+        dob: '1998-07-15',
+        birthTime: '10:30',
+        amPm: 'AM',
+        placeOfBirth: 'Toronto, ON, Canada',
+        gender: 'Female'
+      },
+      requestedReaderId: chosenReader?.id || 'psychic-astrid-lind',
+      requestedReaderName: chosenReader?.name || 'Psychic Astrid Lind',
+      assignedReaderId: chosenReader?.id || 'psychic-astrid-lind',
+      assignedReaderName: chosenReader?.name || 'Psychic Astrid Lind',
+      status: 'waiting',
+      isFreeConsultation: true,
+      freeSecondsRemaining: 180,
+      totalDurationSeconds: 0,
+      paidSeconds: 0,
+      paymentStatus: 'free_tier',
+      ratePerMinute: chosenReader?.ratePerMinute || 0.99,
+      createdAt: new Date().toISOString(),
+      messages: []
+    };
+
+    setIncomingAlertSession(testSession);
   };
 
   // End / Complete active session
@@ -667,6 +828,29 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
                 <span>Admin CMS</span>
               </button>
             )}
+
+            {/* Test incoming chat alert simulation */}
+            <button
+              onClick={handleTestIncomingAlert}
+              className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Test incoming chat pop-up & marimba sound"
+            >
+              <BellRing className="w-3.5 h-3.5 text-rose-600 animate-bounce" />
+              <span className="hidden sm:inline">Test Alert Sound</span>
+            </button>
+
+            {/* Sound Mute / Unmute Button */}
+            <button
+              onClick={() => setIsRingtoneMuted(!isRingtoneMuted)}
+              className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                isRingtoneMuted 
+                  ? 'text-slate-400 hover:text-slate-600 bg-slate-100' 
+                  : 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+              }`}
+              title={isRingtoneMuted ? 'Ringtone is muted (Click to unmute)' : 'Ringtone is active (Click to mute)'}
+            >
+              {isRingtoneMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-emerald-600" />}
+            </button>
 
             {/* Notification icon */}
             <button
@@ -2260,6 +2444,251 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Marimba Waiting Ringtone Audio Asset */}
+      <audio 
+        ref={ringtoneAudioRef} 
+        src="/assets/aistudio/mixkit-marimba-waiting-ringtone-1360_715cddd4.wav" 
+        preload="auto" 
+        loop 
+      />
+
+      {/* ========================================================================= */}
+      {/* SCREEN POP MODAL: INCOMING CHAT CONSULTATION ALERT */}
+      {/* Displays chosen astrologer name & image, user name, sound & accept/decline */}
+      {/* ========================================================================= */}
+      {incomingAlertSession && (() => {
+        const chosenAstrologer = getChosenAstrologerDetails(incomingAlertSession);
+        const seekerName = incomingAlertSession.customerName || incomingAlertSession.birthDetails?.name || 'Valued Seeker';
+        const seekerTopic = incomingAlertSession.topic || incomingAlertSession.readingType || 'General Consultation';
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border-2 border-rose-500/30 overflow-hidden text-slate-900 animate-in zoom-in-95 duration-200">
+              
+              {/* Top Animated Alert Header */}
+              <div className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 p-4 text-white relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent pointer-events-none" />
+                
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <span className="flex h-3.5 w-3.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-white"></span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-200 block">
+                        Incoming Live Chat
+                      </span>
+                      <h3 className="font-extrabold text-base sm:text-lg flex items-center gap-2">
+                        <span>New Consultation Request</span>
+                        <Sparkles className="w-4 h-4 text-amber-200 fill-amber-200" />
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Sound & Dismiss Controls */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsRingtoneMuted(!isRingtoneMuted)}
+                      className="px-2.5 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-xs text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-white/20"
+                      title={isRingtoneMuted ? 'Unmute Marimba Ringtone' : 'Mute Sound'}
+                    >
+                      {isRingtoneMuted ? (
+                        <>
+                          <VolumeX className="w-3.5 h-3.5 text-amber-200" />
+                          <span className="text-[11px]">Unmute</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5 text-white animate-pulse" />
+                          <span className="text-[11px]">Playing</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleDeclineIncomingAlert}
+                      className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                      title="Dismiss"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Content Body */}
+              <div className="p-6 space-y-5">
+
+                {/* 1. CHOSEN ASTROLOGER CARD */}
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 relative">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                      <span>Astrologer Chosen By Seeker</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                      Target Reader
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3.5">
+                    {/* Astrologer Image */}
+                    <div className="relative shrink-0">
+                      <div className="w-16 h-16 rounded-full ring-3 ring-amber-400/80 overflow-hidden bg-slate-200 shadow-md">
+                        <img 
+                          src={chosenAstrologer.image} 
+                          alt={chosenAstrologer.name} 
+                          className="w-full h-full object-cover" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80';
+                          }}
+                        />
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-xs" />
+                    </div>
+
+                    {/* Astrologer Name & Title */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-extrabold text-slate-900 text-base sm:text-lg truncate">
+                          {chosenAstrologer.name}
+                        </h4>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      </div>
+                      <p className="text-xs font-semibold text-slate-600 truncate mt-0.5">
+                        {chosenAstrologer.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-medium text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-md">
+                          {chosenAstrologer.category}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                          <span>{chosenAstrologer.rating} Rating</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connecting Sparkle Ribbon */}
+                <div className="flex items-center justify-center gap-2 text-slate-400">
+                  <div className="flex-1 h-px bg-slate-200" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-rose-500" />
+                    <span>Seeker Details</span>
+                    <Sparkles className="w-3 h-3 text-rose-500" />
+                  </span>
+                  <div className="flex-1 h-px bg-slate-200" />
+                </div>
+
+                {/* 2. USER / SEEKER DETAILS CARD */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm">
+                        {seekerName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-extrabold text-slate-900">
+                            {seekerName}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                            Online
+                          </span>
+                        </div>
+                        <span className="text-xs text-rose-600 font-semibold block mt-0.5">
+                          Topic: {seekerTopic}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-mono text-slate-500 flex items-center justify-end gap-1">
+                        <Clock className="w-3 h-3 text-rose-500" />
+                        <span>Ringing Now</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Seeker Intake / Birth Info */}
+                  {incomingAlertSession.birthDetails && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/70 text-[11px]">
+                      {incomingAlertSession.birthDetails.dob && (
+                        <div className="text-slate-600">
+                          <span className="text-slate-400 font-medium">DOB: </span>
+                          <span className="font-semibold">{incomingAlertSession.birthDetails.dob}</span>
+                        </div>
+                      )}
+                      {incomingAlertSession.birthDetails.gender && (
+                        <div className="text-slate-600">
+                          <span className="text-slate-400 font-medium">Gender: </span>
+                          <span className="font-semibold">{incomingAlertSession.birthDetails.gender}</span>
+                        </div>
+                      )}
+                      {((incomingAlertSession.birthDetails as any).timeOfBirth || incomingAlertSession.birthDetails.birthTime) && (
+                        <div className="text-slate-600">
+                          <span className="text-slate-400 font-medium">TOB: </span>
+                          <span className="font-semibold">
+                            {(incomingAlertSession.birthDetails as any).timeOfBirth || `${incomingAlertSession.birthDetails.birthTime || ''} ${incomingAlertSession.birthDetails.amPm || ''}`}
+                          </span>
+                        </div>
+                      )}
+                      {incomingAlertSession.birthDetails.placeOfBirth && (
+                        <div className="text-slate-600 truncate">
+                          <span className="text-slate-400 font-medium">POB: </span>
+                          <span className="font-semibold">{incomingAlertSession.birthDetails.placeOfBirth}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Initial Question snippet if provided */}
+                  {incomingAlertSession.initialQuestion && (
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 text-xs text-slate-700 italic">
+                      "{incomingAlertSession.initialQuestion}"
+                    </div>
+                  )}
+                </div>
+
+                {/* Sound status note */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0" />
+                    <span>Notification ringtone: <strong>Mixkit Marimba</strong></span>
+                  </span>
+                  <span>{isRingtoneMuted ? '(Muted)' : '(Ringing in Loop)'}</span>
+                </div>
+
+                {/* 3. ACTION BUTTONS: DECLINE OR ACCEPT */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={handleDeclineIncomingAlert}
+                    className="py-3 px-4 rounded-2xl border-2 border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4 text-rose-500" />
+                    <span>Decline Chat</span>
+                  </button>
+
+                  <button
+                    onClick={handleAcceptIncomingAlert}
+                    className="py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer active:scale-[0.99]"
+                  >
+                    <Phone className="w-4 h-4 fill-white" />
+                    <span>Accept Chat</span>
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
