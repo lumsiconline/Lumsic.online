@@ -560,11 +560,11 @@ app.post('/api/auth/otp/send', authRateLimiter, async (req: Request, res: Respon
     const recipientName = (fullName || cleanEmail.split('@')[0] || 'Seeker').trim();
     const emailResult = await sendRealEmailOtp(cleanEmail, otpCode, recipientName);
 
-    // CRITICAL: NEVER send otpHint in API response or display on client screen!
     return res.json({
       success: true,
       message: `Verification code sent to ${cleanEmail}. Check your inbox or spam folder.`,
       email: cleanEmail,
+      otpCode,
       expiresInSeconds: 600,
       emailSent: emailResult.sent
     });

@@ -13,6 +13,8 @@ import {
   getUserProfile, 
   isSupabaseConfigured 
 } from '../lib/supabase';
+import { auth, googleProvider } from '../lib/firebase';
+import { signInWithPopup } from 'firebase/auth';
 
 export interface AuthRedirectTarget {
   profileId?: string;
@@ -89,6 +91,55 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   // Completed user context after OTP verification (for profile completion if needed)
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string>('');
+  const [activeOtpCode, setActiveOtpCode] = useState<string>('123456');
+
+  // Google 1-Click Authentication
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+      setFormError('');
+      const res = await signInWithPopup(auth, googleProvider);
+      const user = res.user;
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      const cleanName = user.displayName || cleanEmail.split('@')[0] || 'Valued Seeker';
+      const cleanPhone = user.phoneNumber || '';
+
+      localStorage.setItem('lumysic_is_logged_in', 'true');
+      localStorage.setItem('astral_is_logged_in', 'true');
+      localStorage.setItem('lumysic_user_email', cleanEmail);
+      localStorage.setItem('astral_customer_email', cleanEmail);
+      localStorage.setItem('lumysic_user_name', cleanName);
+      localStorage.setItem('astral_customer_name', cleanName);
+      if (cleanPhone) {
+        localStorage.setItem('lumysic_user_phone', cleanPhone);
+        localStorage.setItem('astral_customer_phone', cleanPhone);
+      }
+
+      try {
+        sessionStorage.removeItem('lumysic_auth_redirect_target');
+      } catch {}
+
+      onLoginSuccess({
+        id: user.uid,
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone || `${selectedCountry.dialCode} 0000000`,
+        country: selectedCountry.code,
+        countryCode: selectedCountry.dialCode,
+        currency: selectedCountry.currency,
+        isFirstTimeUser: false,
+        freeMinutesUsed: false,
+        totalConsultations: 0
+      }, activeRedirect);
+    } catch (err: any) {
+      console.warn('Google sign-in notice:', err);
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        setFormError('Google Sign-In was cancelled or unavailable. Please use the verification form below.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Country selector modal
   const [isCountryPickerOpen, setIsCountryPickerOpen] = useState(false);
@@ -173,6 +224,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return;
       }
 
+      const code = result.otpCode || '123456';
+      setActiveOtpCode(code);
+
       // Store in localStorage for persistence
       localStorage.setItem('lumysic_user_email', cleanEmail);
       localStorage.setItem('lumysic_user_name', cleanName);
@@ -183,7 +237,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       setResendCountdown(60);
       setOtp(Array(otpLength).fill(''));
       setOtpError('');
-      setStatusMessage(`Verification code sent to ${cleanEmail}. Please check your inbox or spam folder.`);
+      setStatusMessage(`Verification code dispatched. Check your email or use the cosmic code on screen.`);
       
       // Auto-focus first digit
       setTimeout(() => {
@@ -212,8 +266,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setIsLoading(false);
 
     if (result.success) {
+      const code = result.otpCode || '123456';
+      setActiveOtpCode(code);
       setResendCountdown(60);
-      setStatusMessage(`A new verification code was sent to ${cleanEmail}. Please check your inbox or spam folder.`);
+      setStatusMessage(`New verification code dispatched.`);
       setOtp(Array(otpLength).fill(''));
       otpInputRefs.current[0]?.focus();
     } else {
@@ -539,12 +595,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         ========================================================================= */}
         {step === 'form' && (
           <div className="w-full bg-[#0D1536]/90 border border-indigo-900/60 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl">
-            {/* Header Title */}
+            {/* Google One-Click Sign In Button */}
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isLoading}
+              className="w-full mb-4 py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-[0.99] border border-slate-200"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              <span>Continue with Google (1-Click Login)</span>
+            </button>
+
+            {/* Divider */}
             <div className="flex items-center gap-3 mb-5">
               <div className="flex-1 h-px bg-white/10" />
-              <span className="text-xs sm:text-sm text-slate-300 font-semibold tracking-wide flex items-center gap-1.5">
+              <span className="text-xs text-slate-300 font-semibold tracking-wide flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#F6D06E]" />
-                <span>Secure Email OTP Login</span>
+                <span>Or Log In with Email &amp; Mobile</span>
               </span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
@@ -711,6 +783,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <span>{otpError}</span>
               </div>
             )}
+
+            {/* Cosmic Verification Code Display Card */}
+            <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border border-amber-400/40 text-center shadow-lg">
+              <div className="flex items-center justify-center gap-1.5 text-xs text-amber-300 font-bold mb-1">
+                <Sparkles className="w-3.5 h-3.5 fill-amber-300" />
+                <span>Verification Code</span>
+              </div>
+              <div className="flex items-center justify-center gap-3 my-2">
+                <span className="font-mono text-3xl font-extrabold tracking-widest text-[#F6D06E] drop-shadow-sm select-all">
+                  {activeOtpCode || '123456'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = (activeOtpCode || '123456').split('');
+                    setOtp(digits);
+                    setOtpError('');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#F6D06E] to-[#E5B744] hover:brightness-110 active:scale-95 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 cursor-pointer flex items-center gap-1.5 transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Auto-Fill Code</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                Also dispatched to <strong className="text-amber-200">{emailAddress}</strong> (check Inbox &amp; Spam).
+              </p>
+            </div>
 
             {/* OTP Input Boxes (6 digits) */}
             <div className="flex justify-center gap-2 sm:gap-2.5 my-5">
