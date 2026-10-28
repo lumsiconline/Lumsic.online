@@ -2013,6 +2013,57 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
               <form onSubmit={handleSaveSettings} className="space-y-6">
                 
+                {/* Admin Portal Link & Access Permissions */}
+                <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-6 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <h2 className="text-sm font-bold text-white">Admin Command Center Link &amp; Access Control</h2>
+                        <p className="text-[11px] text-slate-400">Direct portal link and authorized credentials restriction</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase">
+                      Admin Protected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Direct Admin Link</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-amber-300 font-mono font-bold text-xs bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 flex-1 truncate">
+                          admin/lumsic.online
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lumsic.online';
+                            navigator.clipboard.writeText(`${origin}/admin/lumsic.online`);
+                            showToast('Admin link copied to clipboard!');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition cursor-pointer shrink-0 shadow"
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        When this link is opened in any browser, the Admin Command Center opens directly and prompts for administrator credentials.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Who Can Log In</span>
+                      <div className="text-xs text-white font-medium">
+                        Owner / Super Admin: <span className="text-amber-300 font-mono font-bold">bankush014@gmail.com</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Access is restricted exclusively to authorized admin credentials. Unauthorized accounts are blocked. Use the top bar &ldquo;Admin Access Control&rdquo; button to grant or revoke login permissions for any team member.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Pricing Defaults */}
                 <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-800 pb-3">

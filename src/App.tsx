@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, ShieldCheck, Compass } from 'lucide-react';
 import { AdminCMSPanel } from './components/AdminCMSPanel';
+import { AdminStandaloneApp } from './components/AdminStandaloneApp';
 import { AstroboardView } from './components/AstroboardView';
 import { Header } from './components/Header';
 import { OfferBanner } from './components/OfferBanner';
@@ -48,14 +49,20 @@ import { READERS } from './data/readers';
 export default function App() {
 
 
-  // Admin View State - strictly restricted to authorized owner login (bankush014@gmail.com)
+  // Admin View State - automatically opens when navigating to admin/lumsic.online, /admin, or ?admin=true
   const [isAdminView, setIsAdminView] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const email = (localStorage.getItem('lumysic_user_email') || localStorage.getItem('astral_customer_email') || '').trim().toLowerCase();
-      const isOwner = ['bankush014@gmail.com', 'banksuh014@gmail.com', 'info.lumsic@gmail.com'].includes(email);
-      const isLogged = localStorage.getItem('astral_is_logged_in') === 'true' || localStorage.getItem('lumysic_is_logged_in') === 'true';
-      if (isOwner && isLogged && (params.get('admin') === 'true' || window.location.pathname.includes('/admin'))) {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (
+        path.includes('admin/lumsic.online') ||
+        hash.includes('admin/lumsic.online') ||
+        path.includes('/admin') ||
+        hash.includes('/admin') ||
+        params.get('admin') === 'true' ||
+        params.get('panel') === 'admin'
+      ) {
         return true;
       }
     }
@@ -733,24 +740,10 @@ export default function App() {
     ? (readers.find(r => r.id === activeSession.requestedReaderId) || readers.find(r => r.id === activeSession.assignedReaderId) || readers[0])
     : readers[0];
 
-  if (isAdminView && isOwnerAdmin) {
-    const currentAdminProfile = {
-      uid: 'super_admin_bankush',
-      email: currentUserEmail || 'bankush014@gmail.com',
-      displayName: customer.name || 'Bankush (Super Admin)',
-      role: 'admin' as const,
-      isAdmin: true,
-      isAstrologer: false
-    };
-
+  if (isAdminView) {
     return (
-      <AdminCMSPanel
+      <AdminStandaloneApp
         onBackToSite={() => setIsAdminView(false)}
-        currentAdminProfile={currentAdminProfile}
-        onOpenAstrologerDashboard={() => {
-          setIsAdminView(false);
-          setIsAstroboardView(true);
-        }}
       />
     );
   }

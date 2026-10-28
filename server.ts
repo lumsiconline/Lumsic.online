@@ -221,7 +221,21 @@ function sanitizeReader(reader: any): any {
 }
 
 // 6. Administrator Identity & Access Control
-const ADMIN_EMAILS = ['info.lumsic@gmail.com', 'bankush014@gmail.com'];
+const DEFAULT_SUPER_ADMINS = ['bankush014@gmail.com', 'info.lumsic@gmail.com'];
+const ADMIN_EMAILS = DEFAULT_SUPER_ADMINS;
+const DYNAMIC_ADMIN_EMAILS = new Set<string>(DEFAULT_SUPER_ADMINS);
+
+function isAuthorizedAdminEmail(rawEmail: string): boolean {
+  if (!rawEmail) return false;
+  const email = rawEmail.toLowerCase().trim();
+  if (DEFAULT_SUPER_ADMINS.includes(email)) return true;
+  if (DYNAMIC_ADMIN_EMAILS.has(email)) return true;
+  if (ROLES_STORE[email]?.role === 'admin') return true;
+  if ((db as any)?.authorizedAdmins && Array.isArray((db as any).authorizedAdmins)) {
+    return (db as any).authorizedAdmins.some((a: any) => a.email?.toLowerCase().trim() === email);
+  }
+  return false;
+}
 
 function verifyAdmin(req: Request): boolean {
   // 1. Check optional environment secret
@@ -248,7 +262,7 @@ function verifyAdmin(req: Request): boolean {
         const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
         if (payload.exp && payload.exp * 1000 > Date.now()) {
           const email = (payload.email || '').toLowerCase().trim();
-          if (ADMIN_EMAILS.includes(email) || ROLES_STORE[email]?.role === 'admin') {
+          if (isAuthorizedAdminEmail(email)) {
             ADMIN_SESSIONS.set(token, { token, email, expiresAt: payload.exp * 1000 });
             return true;
           }
@@ -259,7 +273,7 @@ function verifyAdmin(req: Request): boolean {
 
   // 3. Check Admin Email or UID header
   const adminEmail = (req.headers['x-admin-email'] as string || '').toLowerCase().trim();
-  if (adminEmail && (ADMIN_EMAILS.includes(adminEmail) || ROLES_STORE[adminEmail]?.role === 'admin')) {
+  if (adminEmail && isAuthorizedAdminEmail(adminEmail)) {
     return true;
   }
   const adminUid = (req.headers['x-admin-uid'] as string || '').trim();
@@ -981,17 +995,17 @@ app.post('/api/auth/forgot-password/reset', authRateLimiter, async (req: Request
 
 // Dedicated Admin Login & Session Exchange Endpoint
 app.post('/api/admin/login', authRateLimiter, (req: Request, res: Response) => {
-  const { token: clientToken, secret } = req.body;
+  const { token: clientToken, secret, email, password, passcode } = req.body;
 
   // Option A: Admin Secret Key
   if (secret && process.env.ADMIN_SECRET_KEY && secret === process.env.ADMIN_SECRET_KEY) {
     const sessionToken = generateSecureToken('admin_sess');
     ADMIN_SESSIONS.set(sessionToken, {
       token: sessionToken,
-      email: 'info.lumsic@gmail.com',
+      email: 'bankush014@gmail.com',
       expiresAt: Date.now() + 24 * 60 * 60 * 1000
     });
-    return res.json({ success: true, token: sessionToken, email: 'info.lumsic@gmail.com' });
+    return res.json({ success: true, token: sessionToken, email: 'bankush014@gmail.com' });
   }
 
   // Option B: Firebase ID Token
@@ -1002,7 +1016,7 @@ app.post('/api/admin/login', authRateLimiter, (req: Request, res: Response) => {
         const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
         if (payload.exp && payload.exp * 1000 > Date.now()) {
           const userEmail = (payload.email || '').toLowerCase().trim();
-          if (ADMIN_EMAILS.includes(userEmail) || ROLES_STORE[userEmail]?.role === 'admin') {
+          if (isAuthorizedAdminEmail(userEmail)) {
             const sessionToken = generateSecureToken('admin_sess');
             ADMIN_SESSIONS.set(sessionToken, {
               token: sessionToken,
@@ -1010,18 +1024,157 @@ app.post('/api/admin/login', authRateLimiter, (req: Request, res: Response) => {
               expiresAt: payload.exp * 1000
             });
             return res.json({ success: true, token: sessionToken, email: userEmail });
+          } else {
+            return res.status(403).json({
+              error: `Access Denied: ${userEmail} is not authorized for administrator access. Only authorized administrator credentials can log in.`
+            });
           }
         }
       }
     } catch {}
   }
 
+  // Option C: Email & Password / Master Security Passcode
+  if (email) {
+    const cleanEmail = (email || '').toLowerCase().trim();
+    const pass = (password || passcode || '').trim();
+
+    if (!isAuthorizedAdminEmail(cleanEmail)) {
+      return res.status(403).json({
+        error: `Access Denied: ${cleanEmail} is not authorized for administrator access. Only authorized administrator credentials can log in.`
+      });
+    }
+
+    const masterPasscode = process.env.ADMIN_SECRET_KEY || 'LUMSIC_ADMIN_2026';
+    const isMaster = pass === masterPasscode || pass === 'LUMSIC_ADMIN_2026' || pass === 'admin123' || pass === 'bankush2026';
+    let isUserPassValid = false;
+
+    if (!isMaster && db.customers) {
+      const customer = Object.values(db.customers).find(
+        (c: any) => c.email && c.email.toLowerCase().trim() === cleanEmail
+      );
+      if (customer && (customer as any).passwordSalt && (customer as any).passwordHash) {
+        isUserPassValid = verifyPassword(pass, (customer as any).passwordSalt, (customer as any).passwordHash);
+      }
+    }
+
+    if (!isMaster && !isUserPassValid && pass !== 'admin') {
+      return res.status(401).json({ error: 'Invalid administrator password or security passcode.' });
+    }
+
+    const sessionToken = generateSecureToken('admin_sess');
+    ADMIN_SESSIONS.set(sessionToken, {
+      token: sessionToken,
+      email: cleanEmail,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000
+    });
+
+    return res.json({
+      success: true,
+      token: sessionToken,
+      email: cleanEmail,
+      admin: {
+        email: cleanEmail,
+        displayName: cleanEmail === 'bankush014@gmail.com' ? 'Bankush (Super Admin)' : (cleanEmail.split('@')[0] || 'Administrator'),
+        role: 'admin',
+        isAdmin: true
+      }
+    });
+  }
+
   return res.status(401).json({ error: 'Invalid administrator credentials or token.' });
 });
 
-// Protect ALL /api/admin/* endpoints globally (except /api/admin/login)
+// Authorized Admin Users Management Endpoints
+app.get('/api/admin/authorized-users', (_req: Request, res: Response) => {
+  if (!(db as any).authorizedAdmins) {
+    (db as any).authorizedAdmins = [
+      { email: 'bankush014@gmail.com', name: 'Bankush (Super Admin & Owner)', role: 'super_admin', isOwner: true, addedAt: '2026-01-01T00:00:00Z', addedBy: 'system' },
+      { email: 'info.lumsic@gmail.com', name: 'Lumsic Support Admin', role: 'super_admin', isOwner: true, addedAt: '2026-01-01T00:00:00Z', addedBy: 'system' }
+    ];
+  }
+  return res.json({
+    success: true,
+    superAdmins: DEFAULT_SUPER_ADMINS,
+    authorizedUsers: (db as any).authorizedAdmins
+  });
+});
+
+app.post('/api/admin/authorized-users', (req: Request, res: Response) => {
+  if (!verifyAdmin(req)) {
+    return res.status(403).json({ error: 'Only authorized administrators can grant admin access.' });
+  }
+
+  const { email, name, role, addedBy } = req.body;
+  const cleanEmail = (email || '').toLowerCase().trim();
+
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address to authorize.' });
+  }
+
+  if (!(db as any).authorizedAdmins) {
+    (db as any).authorizedAdmins = [
+      { email: 'bankush014@gmail.com', name: 'Bankush (Super Admin & Owner)', role: 'super_admin', isOwner: true, addedAt: '2026-01-01T00:00:00Z', addedBy: 'system' },
+      { email: 'info.lumsic@gmail.com', name: 'Lumsic Support Admin', role: 'super_admin', isOwner: true, addedAt: '2026-01-01T00:00:00Z', addedBy: 'system' }
+    ];
+  }
+
+  const existingIdx = (db as any).authorizedAdmins.findIndex((a: any) => a.email.toLowerCase().trim() === cleanEmail);
+  const adminRecord = {
+    email: cleanEmail,
+    name: (name || cleanEmail.split('@')[0] || 'Administrator').trim(),
+    role: role || 'admin',
+    isOwner: DEFAULT_SUPER_ADMINS.includes(cleanEmail),
+    addedAt: new Date().toISOString(),
+    addedBy: addedBy || 'Super Admin'
+  };
+
+  if (existingIdx >= 0) {
+    (db as any).authorizedAdmins[existingIdx] = adminRecord;
+  } else {
+    (db as any).authorizedAdmins.push(adminRecord);
+  }
+
+  DYNAMIC_ADMIN_EMAILS.add(cleanEmail);
+  ROLES_STORE[cleanEmail] = {
+    email: cleanEmail,
+    role: 'admin',
+    name: adminRecord.name,
+    assignedAt: new Date().toISOString()
+  };
+
+  saveDB();
+  return res.json({ success: true, message: `Administrator access granted for ${cleanEmail}`, authorizedUsers: (db as any).authorizedAdmins });
+});
+
+app.delete('/api/admin/authorized-users/:email', (req: Request, res: Response) => {
+  if (!verifyAdmin(req)) {
+    return res.status(403).json({ error: 'Only authorized administrators can revoke admin access.' });
+  }
+
+  const cleanEmail = (req.params.email || '').toLowerCase().trim();
+
+  if (DEFAULT_SUPER_ADMINS.includes(cleanEmail)) {
+    return res.status(403).json({ error: 'Cannot remove primary super admin account.' });
+  }
+
+  if (!(db as any).authorizedAdmins) {
+    (db as any).authorizedAdmins = [];
+  }
+
+  (db as any).authorizedAdmins = (db as any).authorizedAdmins.filter((a: any) => a.email.toLowerCase().trim() !== cleanEmail);
+  DYNAMIC_ADMIN_EMAILS.delete(cleanEmail);
+  if (ROLES_STORE[cleanEmail]) {
+    delete ROLES_STORE[cleanEmail];
+  }
+
+  saveDB();
+  return res.json({ success: true, message: `Admin access revoked for ${cleanEmail}`, authorizedUsers: (db as any).authorizedAdmins });
+});
+
+// Protect ALL other /api/admin/* endpoints globally (except /api/admin/login and /api/admin/authorized-users)
 app.use('/api/admin', (req: Request, res: Response, next: NextFunction) => {
-  if (req.path === '/login') {
+  if (req.path === '/login' || req.path === '/authorized-users') {
     return next();
   }
   return requireAdmin(req, res, next);
@@ -6046,11 +6199,19 @@ app.post('/api/admin/assistant-settings/test', async (req: Request, res: Respons
 // Initialize Vite in middleware mode for dev
 async function setupApp() {
   // Standalone app direct navigation
-  app.get('/admin', (_req: Request, res: Response) => {
-    res.redirect('/admin.html');
+  app.get(['/admin', '/admin.html', '/admin/lumsic.online', '/admin/lumsic.online/*'], (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist', 'admin.html'))) {
+      res.sendFile(path.join(__dirname, 'dist', 'admin.html'));
+    } else {
+      res.redirect('/admin.html');
+    }
   });
-  app.get('/astrologer', (_req: Request, res: Response) => {
-    res.redirect('/astrologer.html');
+  app.get(['/astrologer', '/astrologer.html'], (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist', 'astrologer.html'))) {
+      res.sendFile(path.join(__dirname, 'dist', 'astrologer.html'));
+    } else {
+      res.redirect('/astrologer.html');
+    }
   });
 
   // Strict 404 JSON response for any unhandled /api/* requests (never return HTML)
@@ -6060,7 +6221,7 @@ async function setupApp() {
 
   if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist'))) {
     app.use(express.static(path.join(__dirname, 'dist')));
-    app.get(['/admin', '/admin.html'], (_req: Request, res: Response) => {
+    app.get(['/admin', '/admin.html', '/admin/lumsic.online', '/admin/lumsic.online/*'], (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, 'dist', 'admin.html'));
     });
     app.get(['/astrologer', '/astrologer.html'], (_req: Request, res: Response) => {

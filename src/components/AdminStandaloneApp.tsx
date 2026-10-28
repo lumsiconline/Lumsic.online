@@ -3,17 +3,22 @@ import { AdminAuthGuard } from './AdminAuthGuard';
 import { AdminCMSPanel } from './AdminCMSPanel';
 import { AuthUserProfile } from '../lib/firebase';
 
-export const AdminStandaloneApp: React.FC = () => {
+interface AdminStandaloneAppProps {
+  onBackToSite?: () => void;
+}
+
+export const AdminStandaloneApp: React.FC<AdminStandaloneAppProps> = ({ onBackToSite }) => {
   return (
-    <AdminAuthGuard>
+    <AdminAuthGuard onBackToSite={onBackToSite}>
       {(profile: AuthUserProfile) => (
         <AdminCMSPanel
-          onBackToSite={() => {
-            window.location.reload();
-          }}
+          onBackToSite={onBackToSite || (() => {
+            window.location.href = '/';
+          })}
           currentAdminProfile={profile}
         />
       )}
     </AdminAuthGuard>
   );
 };
+
