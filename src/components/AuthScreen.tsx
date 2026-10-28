@@ -190,7 +190,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       handleAuthSuccess(result.user);
     } catch (err: any) {
       setIsLoading(false);
-      setFormError(err?.message || 'Login failed. Please check your credentials and try again.');
+      const msg = err?.message || '';
+      setFormError(msg.toLowerCase().includes('failed to fetch') ? 'Unable to connect to service. Please check your connection and try again.' : (msg || 'Login failed. Please check your credentials and try again.'));
     }
   };
 
@@ -257,7 +258,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       handleAuthSuccess(result.user);
     } catch (err: any) {
       setIsLoading(false);
-      setFormError(err?.message || 'Network error during signup. Please try again.');
+      const msg = err?.message || '';
+      setFormError(msg.toLowerCase().includes('failed to fetch') ? 'Unable to connect. Please try again.' : (msg || 'Signup failed. Please try again.'));
     }
   };
 
