@@ -4119,19 +4119,17 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     requestedReaderId 
   } = req.body;
 
-  if (!requestedReaderId) {
-    return res.status(400).json({ error: 'Please choose a reader' });
-  }
-
-  const requestedReader = db.readers.find(r => r.id === requestedReaderId || r.astroId === requestedReaderId) || db.readers[0];
+  const effectiveReaderId = requestedReaderId || (db.readers[0] ? db.readers[0].id : 'psychic-tamara');
+  const requestedReader = db.readers.find(r => r.id === effectiveReaderId || r.astroId === effectiveReaderId) || db.readers[0];
   const psychicTamara = db.readers.find(r => r.id === 'psychic-tamara' || r.astroId === 'LYS-10001') || db.readers[0];
 
   // Check or register customer
-  let cust = db.customers[customerId];
+  const effectiveCustomerId = customerId || ('cust_' + Date.now());
+  let cust = db.customers[effectiveCustomerId];
   const effectiveName = firstName || customerName || birthDetails?.name || 'Valued Seeker';
   if (!cust) {
     cust = {
-      id: customerId || 'cust_' + Date.now(),
+      id: effectiveCustomerId,
       name: effectiveName,
       birthDetails,
       isFirstTimeUser: true,

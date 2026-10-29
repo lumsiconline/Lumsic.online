@@ -292,14 +292,23 @@ export const CustomerIntakeModal: React.FC<CustomerIntakeModalProps> = ({
                 />
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 space-y-2.5">
+                <button
+                  type="button"
+                  onClick={handleFinalSubmit}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 active:scale-[0.98] text-gray-950 font-extrabold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 border border-amber-300"
+                >
+                  <Sparkles className="w-4 h-4 fill-gray-950 text-gray-950" />
+                  <span>Start Free Chat with {reader.name} Now</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleNext}
                   disabled={!name.trim()}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#7C3AED] via-[#8B5CF6] to-[#6D28D9] hover:brightness-110 active:scale-[0.98] text-white font-bold text-base shadow-xl shadow-purple-950/60 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full py-3 rounded-2xl bg-white/15 hover:bg-white/20 active:scale-[0.98] text-white/90 font-bold text-xs border border-white/15 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Next
+                  Add Birth Details (Optional) →
                 </button>
               </div>
             </div>

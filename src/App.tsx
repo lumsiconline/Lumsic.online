@@ -579,22 +579,33 @@ export default function App() {
 
   // Consultation Handlers
   const handleInitiateChatWithReader = (reader: Reader) => {
+    setSelectedProfileReader(null);
+    const savedName = customer.name || (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_name') || localStorage.getItem('astral_customer_name')) : '') || '';
+
     if (!isAuthenticated) {
       setAuthRedirectTarget({
         profileId: reader.id,
         profileName: reader.name,
         profileType: 'reader'
       });
-      setSelectedProfileReader(null);
       setIsAuthModalOpen(true);
       return;
     }
-    setSelectedProfileReader(null);
-    setSelectedIntakeReader(reader);
+
+    // Authenticated user: immediately start the consultation chat on backend!
+    setSelectedIntakeReader(null);
+    const effectiveName = savedName.trim() || 'Valued Seeker';
+    createSession(reader, {
+      firstName: effectiveName,
+      fullName: effectiveName,
+      readingType: reader.category || 'Live Chat Consultation',
+      topic: 'Love, Career & Life Guidance',
+      question: `Hello ${reader.name}, I would love some intuitive guidance on my path today.`
+    });
   };
 
   const handleQuickStartConsultation = () => {
-    const reader = readers.find(r => r.isOnline && r.isChatEnabled !== false) || readers[0];
+    const reader = readers.find(r => r.id === 'psychic-tamara') || readers.find(r => r.isOnline && r.isChatEnabled !== false) || readers[0];
     if (reader) {
       handleInitiateChatWithReader(reader);
     }
@@ -613,89 +624,70 @@ export default function App() {
     createSession(reader, startData);
   };
 
-  const createSession = async (reader: Reader, startData: ConsultationStartData) => {
+  const createSession = async (reader: Reader, startData?: Partial<ConsultationStartData>) => {
+    const targetReader = reader || readers[0];
+    const customerId = customer.id || localStorage.getItem('astral_customer_id') || ('cust_' + Date.now());
+    const userName = startData?.firstName || startData?.fullName || customer.name || localStorage.getItem('lumysic_user_name') || 'Valued Seeker';
+    const userGender = startData?.birthDetails?.gender || startData?.gender || 'Not specified';
+    const userDob = startData?.birthDetails?.dob || 'Not specified';
+    const userTob = startData?.birthDetails?.unknownTime 
+      ? 'Not known' 
+      : (startData?.birthDetails?.birthTime ? `${startData.birthDetails.birthTime} ${startData.birthDetails.amPm || ''}`.trim() : 'Not specified');
+    const userPob = startData?.birthDetails?.placeOfBirth || 'Not specified';
+
     try {
       const res = await fetch('/api/sessions/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerId: customer.id,
-          firstName: startData.firstName,
-          customerName: startData.fullName || startData.firstName,
-          readingType: startData.readingType,
-          topic: startData.topic,
-          initialQuestion: startData.question,
-          birthDetails: startData.birthDetails,
-          requestedReaderId: reader.id
+          customerId,
+          firstName: userName,
+          customerName: userName,
+          readingType: startData?.readingType || targetReader.category || 'Live Consultation',
+          topic: startData?.topic || 'Love, Career & Life Guidance',
+          initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
+          birthDetails: startData?.birthDetails || {
+            name: userName,
+            gender: userGender,
+            dob: userDob,
+            birthTime: userTob,
+            placeOfBirth: userPob
+          },
+          requestedReaderId: targetReader.id
         })
       });
       const data = await res.json();
-      if (data.session) {
+      if (data && data.session) {
         setActiveSession(data.session);
         setIsChatOpen(true);
+        return;
       }
-    } catch {
-      const now = Date.now();
-      const userName = startData.birthDetails?.name || startData.firstName;
-      const userGender = startData.birthDetails?.gender || startData.gender || 'Not specified';
-      const userDob = startData.birthDetails?.dob || 'Not specified';
-      const userTob = startData.birthDetails?.unknownTime 
-        ? 'Not known' 
-        : (startData.birthDetails?.birthTime ? `${startData.birthDetails.birthTime} ${startData.birthDetails.amPm || ''}`.trim() : 'Not specified');
-      const userPob = startData.birthDetails?.placeOfBirth || 'Not specified';
+    } catch (err) {
+      console.warn('Backend session create failed, retrying free-chat endpoint:', err);
+    }
 
-      const userDetailsCard = `Hi,\nBelow are my details:\nName: ${userName}\nGender: ${userGender}\nDOB: ${userDob}\nTOB: ${userTob}\nPOB: ${userPob}`;
-
-      const mockSession: ConsultationSession = {
-        id: 'sess_' + now,
-        customerId: customer.id,
-        customerName: userName,
-        requestedReaderId: reader.id,
-        requestedReaderName: reader.name,
-        assignedReaderId: 'psychic-tamara',
-        assignedReaderName: 'Psychic Tamara',
-        readingType: startData.readingType,
-        topic: startData.topic,
-        initialQuestion: startData.question,
-        status: 'waiting',
-        unreadForOperator: true,
-        isFreeConsultation: true,
-        freeSecondsRemaining: 120,
-        paidSeconds: 0,
-        totalDurationSeconds: 0,
-        ratePerMinute: reader.ratePerMinute || 1.0,
-        createdAt: new Date().toISOString(),
-        paymentStatus: 'free_tier',
-        messages: [
-          {
-            id: 'msg_details_' + now,
-            sessionId: 'sess_' + now,
-            sender: 'customer',
-            senderName: userName,
-            text: userDetailsCard,
-            timestamp: new Date(now).toISOString()
-          },
-          ...(startData.question && !startData.question.includes('Hello') ? [{
-            id: 'msg_init_' + (now + 100),
-            sessionId: 'sess_' + now,
-            sender: 'customer' as const,
-            senderName: userName,
-            text: startData.question.trim(),
-            timestamp: new Date(now + 100).toISOString()
-          }] : []),
-          {
-            id: 'msg_greet_' + (now + 200),
-            sessionId: 'sess_' + now,
-            sender: 'astrologer',
-            senderName: reader.name,
-            text: userName ? `Hey ${userName} ❤️ I'm glad you're here.\nWhat would you like some clarity on today?` : `Hey ❤️ I'm glad you're here.\nWhat would you like some clarity on today?`,
-            timestamp: new Date(now + 200).toISOString(),
-            isAiMessage: false
-          }
-        ]
-      };
-      setActiveSession(mockSession);
-      setIsChatOpen(true);
+    // Secondary fallback: guaranteed server registration via /api/user/free-chat/start
+    try {
+      const freeRes = await fetch('/api/user/free-chat/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId,
+          customerName: userName,
+          topic: startData?.topic || 'Life Guidance',
+          question: startData?.question || `Hello ${targetReader.name}, I would love intuitive guidance on my life path.`,
+          targetHumanReaderId: targetReader.id,
+          targetHumanReaderName: targetReader.name
+        })
+      });
+      const freeData = await freeRes.json();
+      if (freeData && freeData.session) {
+        setActiveSession(freeData.session);
+        setIsChatOpen(true);
+        return;
+      }
+    } catch (e) {
+      console.error('Free-chat endpoint error:', e);
     }
   };
 
@@ -817,7 +809,7 @@ export default function App() {
         {/* 1. HERO */}
         <Hero
           onCreateBirthChart={handleOpenBirthChart}
-          onFindAstrologer={() => handleNavigateSection('readers')}
+          onFindAstrologer={handleQuickStartConsultation}
           onOpenCompatibility={() => handleNavigateSection('compatibility')}
         />
 
@@ -882,8 +874,8 @@ export default function App() {
 
         {/* 9. FINAL CTA (Start Free Chat with Psychics - Space tightened) */}
         <FinalCTA
-          onStartBirthChart={() => handleNavigateSection('readers')}
-          onFindAstrologer={() => handleNavigateSection('readers')}
+          onStartBirthChart={handleQuickStartConsultation}
+          onFindAstrologer={handleQuickStartConsultation}
         />
 
         {/* 10. VLOGS & GUIDES */}
@@ -1127,13 +1119,18 @@ export default function App() {
               setIsAuthenticated(true);
               setIsAuthModalOpen(false);
 
-              // UNIFIED REDIRECT: Automatically return user to specific profile page
+              // UNIFIED REDIRECT: Immediately start the consultation chat!
               const target = redirect || authRedirectTarget;
               if (target && target.profileId) {
-                const targetReader = readers.find(r => r.id === target.profileId);
-                if (targetReader) {
-                  setSelectedProfileReader(targetReader);
-                }
+                const targetReader = readers.find(r => r.id === target.profileId) || readers[0];
+                const userName = profile.name || localStorage.getItem('lumysic_user_name') || 'Valued Seeker';
+                createSession(targetReader, {
+                  firstName: userName,
+                  fullName: userName,
+                  readingType: targetReader.category || 'Live Consultation',
+                  topic: 'Life, Love & Destiny Guidance',
+                  question: `Hello ${targetReader.name}, I am glad to connect with you.`
+                });
               }
               setAuthRedirectTarget(null);
             }}
