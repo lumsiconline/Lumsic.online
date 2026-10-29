@@ -761,30 +761,6 @@ export default function App() {
     }
   };
 
-
-        setActiveSession(prev => prev ? ({ ...prev, messages: [...prev.messages, userMsg] }) : null);
-
-    try {
-      const res = await fetch(`/api/sessions/${activeSession.id}/message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: 'customer',
-          senderName: activeSession.customerName,
-          text
-        })
-      });
-      const data = await res.json();
-      if (data.session) {
-        setActiveSession(data.session);
-      }
-    } catch (err) {
-      console.warn('Message sync note:', err);
-    }
-    // No automated replies - astrologers handle replies manually
-    return null;
-  };
-
   const handleToggleReaderOnline = (readerId: string, isOnline: boolean) => {
     fetch(`/api/readers/${readerId}/toggle`, {
       method: 'PATCH',
