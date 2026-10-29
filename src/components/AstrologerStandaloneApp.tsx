@@ -3,13 +3,14 @@ import { AstrologerAuthGuard } from './AstrologerAuthGuard';
 import { AstroboardView } from './AstroboardView';
 import { AuthUserProfile } from '../lib/firebase';
 import { Reader } from '../types';
+import { READERS } from '../data/readers';
 
 interface AstrologerStandaloneAppProps {
   onBackToSite?: () => void;
 }
 
 export const AstrologerStandaloneApp: React.FC<AstrologerStandaloneAppProps> = ({ onBackToSite }) => {
-  const [readers, setReaders] = useState<Reader[]>([]);
+  const [readers, setReaders] = useState<Reader[]>(READERS);
 
   useEffect(() => {
     fetch('/api/readers')

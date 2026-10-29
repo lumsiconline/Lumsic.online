@@ -147,6 +147,26 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
     setMatchedReader(reader);
   };
 
+  // Super Login for bankush014@gmail.com (Requested by Platform Owner)
+  const handleSuperLoginBankush = () => {
+    const defaultReader = availableReaders[0] || {
+      id: 'psychic-tamara',
+      astroId: 'LYS-10001',
+      name: 'Psychic Tamara',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+      title: 'Clairvoyant & Love Advisor'
+    };
+    setProfile({
+      uid: 'super_bankush_owner',
+      email: 'bankush014@gmail.com',
+      displayName: 'Bankush (Super Admin & Astrologer)',
+      role: 'admin',
+      isAdmin: true,
+      isAstrologer: true
+    });
+    setMatchedReader(defaultReader as any);
+  };
+
   const handleSignOut = async () => {
     await signOutCurrentUser();
     setProfile(null);
@@ -214,6 +234,16 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
               <span>{errorMsg}</span>
             </div>
           )}
+
+          {/* Super Login for bankush014@gmail.com */}
+          <button
+            type="button"
+            onClick={handleSuperLoginBankush}
+            className="w-full mb-3 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:brightness-110 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] border border-amber-300"
+          >
+            <Sparkles className="w-4 h-4 text-slate-950 animate-spin" />
+            <span>⚡ Super Login: bankush014@gmail.com</span>
+          </button>
 
           {/* Google Sign-in */}
           <button

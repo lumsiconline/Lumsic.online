@@ -61,6 +61,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import { VERIFIED_REVIEWS_POOL } from '../data/reviewsData';
+import { READERS } from '../data/readers';
 
 interface AstroboardViewProps {
   onBackToSite: () => void;
@@ -104,18 +105,23 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   readers: initialReaders,
   onToggleReaderOnline
 }) => {
-  // Readers List
-  const [readers, setReaders] = useState<Reader[]>(initialReaders || []);
+  // Readers List - default to READERS (Psychic Tamara & all 48 astrologers)
+  const [readers, setReaders] = useState<Reader[]>(() => {
+    return initialReaders && initialReaders.length > 0 ? initialReaders : READERS;
+  });
 
-  // Currently authenticated Astrologer
+  // Currently authenticated Astrologer - defaults to Psychic Tamara (LYS-10001)
   const [currentAstrologer, setCurrentAstrologer] = useState<Reader | null>(() => {
     try {
       const saved = localStorage.getItem('astrodashboard_logged_in_astro');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id) return parsed;
+      }
     } catch {
       // ignore
     }
-    return initialReaders?.[0] || null;
+    return (initialReaders && initialReaders.length > 0 ? initialReaders[0] : null) || READERS[0];
   });
 
   // Active navigation section
@@ -250,8 +256,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       if (data.readers && Array.isArray(data.readers)) {
         setReaders(data.readers);
         if (!currentAstrologer && data.readers.length > 0) {
-          setCurrentAstrologer(data.readers[0]);
-          localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(data.readers[0]));
+          // Default to Psychic Tamara workstation since all chats land on her
+          const tamara = data.readers.find((r: Reader) => r.id === 'psychic-tamara' || r.astroId === 'LYS-10001');
+          const defaultReader = tamara || data.readers[0];
+          setCurrentAstrologer(defaultReader);
+          localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(defaultReader));
         }
       }
     } catch (err) {
@@ -282,24 +291,27 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           return updated || current;
         });
 
-        // Detect newly landing incoming chat
+        // Detect newly landing incoming chat: any waiting or pending session triggers screen pop!
+        const incomingCandidate = data.sessions.find((s: ConsultationSession) => {
+          if (dismissedSessionIdsRef.current.has(s.id)) return false;
+          if (activeChatSession && activeChatSession.id === s.id) return false;
+          const statusStr = s.status as string;
+          return statusStr === 'waiting' || statusStr === 'pending';
+        });
+
+        if (incomingCandidate && !incomingAlertSession) {
+          seenSessionIdsRef.current.add(incomingCandidate.id);
+          setIncomingAlertSession(incomingCandidate);
+        }
+
         if (!initialSessionsLoadedRef.current) {
           data.sessions.forEach((s: ConsultationSession) => {
-            seenSessionIdsRef.current.add(s.id);
+            const statusStr = s.status as string;
+            if (statusStr !== 'waiting' && statusStr !== 'pending') {
+              seenSessionIdsRef.current.add(s.id);
+            }
           });
           initialSessionsLoadedRef.current = true;
-        } else {
-          const incomingCandidate = data.sessions.find((s: ConsultationSession) => {
-            if (dismissedSessionIdsRef.current.has(s.id)) return false;
-            const isPending = (s.status as string) === 'pending' || s.status === 'waiting';
-            const isNewUnseen = !seenSessionIdsRef.current.has(s.id);
-            return isPending || isNewUnseen;
-          });
-
-          if (incomingCandidate && !incomingAlertSession) {
-            seenSessionIdsRef.current.add(incomingCandidate.id);
-            setIncomingAlertSession(incomingCandidate);
-          }
         }
       }
     } catch (err) {
@@ -315,8 +327,63 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     const interval = setInterval(() => {
       fetchSessions();
     }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+
+    // Real-time Server-Sent Events (SSE) for 0ms instantaneous screen pop and audio ringtone
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.addEventListener('new_session', (e: MessageEvent) => {
+        try {
+          const session = JSON.parse(e.data);
+          if (session && session.id) {
+            setSessions(prev => [session, ...prev.filter(s => s.id !== session.id)]);
+            if (!dismissedSessionIdsRef.current.has(session.id) && activeChatSession?.id !== session.id) {
+              setIncomingAlertSession(session);
+              playRingtone();
+            }
+          }
+        } catch (err) {
+          console.error('SSE new_session parse error:', err);
+        }
+      });
+
+      es.addEventListener('message_received', (e: MessageEvent) => {
+        try {
+          const raw = JSON.parse(e.data);
+          const msg = raw.message || raw;
+          if (msg && msg.sessionId) {
+            setSessions(prev => prev.map(s => {
+              if (s.id === msg.sessionId) {
+                const msgs = s.messages || [];
+                if (!msgs.some(m => m.id === msg.id)) {
+                  return { ...s, messages: [...msgs, msg] };
+                }
+              }
+              return s;
+            }));
+            setActiveChatSession(curr => {
+              if (curr && curr.id === msg.sessionId) {
+                const msgs = curr.messages || [];
+                if (!msgs.some(m => m.id === msg.id)) {
+                  return { ...curr, messages: [...msgs, msg] };
+                }
+              }
+              return curr;
+            });
+          }
+        } catch (err) {
+          console.error('SSE message_received parse error:', err);
+        }
+      });
+    } catch (err) {
+      console.warn('SSE initialization notice:', err);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (es) es.close();
+    };
+  }, [activeChatSession?.id]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {

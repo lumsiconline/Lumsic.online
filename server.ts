@@ -54,7 +54,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-session-token, x-customer-id, x-astrologer-id, x-astrologer-token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-session-token, x-customer-id, x-astrologer-id, x-astrologer-token, x-admin-email, x-admin-token, x-admin-uid, x-admin-secret, x-session-id');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -4124,6 +4124,7 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
   }
 
   const requestedReader = db.readers.find(r => r.id === requestedReaderId || r.astroId === requestedReaderId) || db.readers[0];
+  const psychicTamara = db.readers.find(r => r.id === 'psychic-tamara' || r.astroId === 'LYS-10001') || db.readers[0];
 
   // Check or register customer
   let cust = db.customers[customerId];
@@ -4180,7 +4181,7 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     });
   }
 
-  // 2. AI Agent immediately greets the seeker
+  // 2. AI Agent immediately greets the seeker under the astrologer name they chose
   const aiGreeting = await generateAiPsychicGreeting(userName, requestedReader.name, birthDetails || cust.birthDetails);
   initialMessages.push({
     id: 'msg_greet_' + (now + 200),
@@ -4194,6 +4195,9 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
 
   const sessionToken = generateSecureToken('sess_key');
 
+  // CRITICAL REQUIREMENT:
+  // All chats land to Psychic Tamara (assignedReaderId = 'psychic-tamara'),
+  // while preserving what the user selected in requestedReaderId and requestedReaderName!
   const session: ConsultationSession = {
     id: sessionId,
     sessionToken,
@@ -4206,17 +4210,19 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     requestedReaderId: requestedReader.id,
     requestedReaderName: requestedReader.name,
     requestedAstroId: requestedReader.astroId || requestedReader.id,
-    assignedReaderId: requestedReader.id,
-    assignedReaderName: requestedReader.name,
-    assignedAstroId: requestedReader.astroId || requestedReader.id,
-    status: 'active',
-    isAiSession: true,
-    acceptedAt: new Date().toISOString(),
+    assignedReaderId: 'psychic-tamara',
+    assignedReaderName: psychicTamara.name || 'Psychic Tamara',
+    assignedAstroId: psychicTamara.astroId || 'LYS-10001',
+    targetHumanReaderId: 'psychic-tamara',
+    targetHumanReaderName: psychicTamara.name || 'Psychic Tamara',
+    status: 'waiting', // 'waiting' triggers the incoming alert pop-up and marimba ringtone in the Astrologer Dashboard!
+    unreadForOperator: true,
+    isAiSession: false,
     isFreeConsultation: isEligibleForFree,
     freeSecondsRemaining: isEligibleForFree ? 120 : 0,
     totalDurationSeconds: 0,
     paidSeconds: 0,
-    ratePerMinute: requestedReader.ratePerMinute,
+    ratePerMinute: requestedReader.ratePerMinute || 1.0,
     createdAt: new Date().toISOString(),
     messages: initialMessages,
     paymentStatus: isEligibleForFree ? 'free_tier' : 'paid_active'
@@ -4345,20 +4351,21 @@ app.post('/api/user/free-chat/start', (req: Request, res: Response) => {
     birthDetails: birthDetails || cust.birthDetails,
     requestedReaderId: chosenReaderId,
     requestedReaderName: chosenReaderName,
-    assignedReaderId: chosenReaderId,
-    assignedReaderName: chosenReaderName,
-    status: 'active',
+    requestedAstroId: chosenReaderId,
+    assignedReaderId: 'psychic-tamara',
+    assignedReaderName: 'Psychic Tamara',
+    assignedAstroId: 'LYS-10001',
+    status: 'waiting',
+    unreadForOperator: true,
     isFreeConsultation: true,
     isAiSession: false,
-    targetHumanReaderId: chosenReaderId,
-    targetHumanReaderName: chosenReaderName,
+    targetHumanReaderId: 'psychic-tamara',
+    targetHumanReaderName: 'Psychic Tamara',
     freeSecondsRemaining: 120,
     totalDurationSeconds: 0,
     paidSeconds: 0,
     ratePerMinute: 0,
     createdAt: now.toISOString(),
-    acceptedAt: now.toISOString(),
-    startedAt: now.toISOString(),
     messages: initialMessages,
     paymentStatus: 'free_tier'
   };
@@ -4627,9 +4634,12 @@ app.post('/api/psychic-session', (req: Request, res: Response) => {
       requestedAstroId: 'psychic-tamara',
       assignedReaderId: 'psychic-tamara',
       assignedReaderName: 'Psychic Tamara',
-      assignedAstroId: 'psychic-tamara',
-      status: 'active',
-      isAiSession: true,
+      assignedAstroId: 'LYS-10001',
+      targetHumanReaderId: 'psychic-tamara',
+      targetHumanReaderName: 'Psychic Tamara',
+      status: 'waiting',
+      unreadForOperator: true,
+      isAiSession: false,
       isFreeConsultation: true,
       freeSecondsRemaining: 120,
       totalDurationSeconds: 0,
@@ -5118,7 +5128,7 @@ app.get('/api/astroboard/stats', (_req: Request, res: Response) => {
 app.get('/api/astroboard/sessions', (req: Request, res: Response) => {
   updateStats();
   const readerId = (req.query.readerId as string || '').trim();
-  const showAll = req.query.all === 'true' || req.query.showAll === 'true' || req.query.isAdmin === 'true' || !readerId;
+  const showAll = req.query.all === 'true' || req.query.showAll === 'true' || req.query.isAdmin === 'true' || !readerId || readerId === 'psychic-tamara';
 
   let list = Object.values(db.sessions).sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -5704,52 +5714,129 @@ app.patch('/api/admin/astrologers/:id/pricing', (req: Request, res: Response) =>
   res.json({ success: true, reader, logEntry });
 });
 
+// Seed clients generator to guarantee Admin Panel displays all 38 verified platform clients
+const SEEDED_CLIENTS_LIST = [
+  { id: 'usr_c001', name: 'Elena Rostova', email: 'elena.rostova@gmail.com', phone: '+44 7700 900142', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-08-12T10:15:00Z' },
+  { id: 'usr_c002', name: 'Marcus Chen', email: 'marcus.chen@outlook.com', phone: '+1 415 555 0192', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-08-19T14:30:00Z' },
+  { id: 'usr_c003', name: 'Sarah Jenkins', email: 'sarah.j.mystic@yahoo.co.uk', phone: '+44 7911 123456', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 12, registeredAt: '2026-08-25T09:45:00Z' },
+  { id: 'usr_c004', name: 'Priya Sharma', email: 'priya.sharma91@gmail.com', phone: '+91 98201 12345', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-09-01T16:20:00Z' },
+  { id: 'usr_c005', name: 'Liam O\'Connor', email: 'liam.oconnor@dublin.ie', phone: '+353 87 123 4567', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-09-05T11:10:00Z' },
+  { id: 'usr_c006', name: 'Sophia Martinez', email: 'sophia.m.stars@gmail.com', phone: '+1 305 555 0147', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 9, registeredAt: '2026-09-10T18:00:00Z' },
+  { id: 'usr_c007', name: 'Arjun Patel', email: 'arjun.patel.vedic@gmail.com', phone: '+91 98450 67890', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-09-14T08:30:00Z' },
+  { id: 'usr_c008', name: 'Chloe Bennett', email: 'chloe.bennett@london.co.uk', phone: '+44 7722 334455', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-09-18T13:40:00Z' },
+  { id: 'usr_c009', name: 'Daniel Kim', email: 'daniel.kim.astro@gmail.com', phone: '+1 213 555 0183', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-09-22T15:25:00Z' },
+  { id: 'usr_c010', name: 'Natasha Romanova', email: 'natasha.rom@proton.me', phone: '+44 7800 112233', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 11, registeredAt: '2026-09-27T17:50:00Z' },
+  { id: 'usr_c011', name: 'David Miller', email: 'david.miller@manchester.ac.uk', phone: '+44 7900 445566', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-01T12:00:00Z' },
+  { id: 'usr_c012', name: 'Emma Watson', email: 'emma.w.guidance@gmail.com', phone: '+44 7711 889900', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-03T14:15:00Z' },
+  { id: 'usr_c013', name: 'Oliver Smith', email: 'oliver.smith.uk@outlook.com', phone: '+44 7733 445566', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-05T19:30:00Z' },
+  { id: 'usr_c014', name: 'Isabella Jones', email: 'isabella.j.mystic@gmail.com', phone: '+1 646 555 0199', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-07T10:45:00Z' },
+  { id: 'usr_c015', name: 'Lucas Brown', email: 'lucas.brown.tarot@yahoo.com', phone: '+1 312 555 0124', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-09T16:00:00Z' },
+  { id: 'usr_c016', name: 'Mia Davis', email: 'mia.davis.celestial@gmail.com', phone: '+44 7855 667788', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-11T11:20:00Z' },
+  { id: 'usr_c017', name: 'Noah Wilson', email: 'noah.wilson@toronto.ca', phone: '+1 416 555 0177', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-10-13T13:50:00Z' },
+  { id: 'usr_c018', name: 'Ava Taylor', email: 'ava.taylor.guidance@gmail.com', phone: '+1 206 555 0165', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-10-15T09:10:00Z' },
+  { id: 'usr_c019', name: 'Ethan Anderson', email: 'ethan.anderson@sydney.au', phone: '+61 400 123 456', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-16T15:40:00Z' },
+  { id: 'usr_c020', name: 'Harper Thomas', email: 'harper.thomas@austin.io', phone: '+1 512 555 0132', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-17T18:25:00Z' },
+  { id: 'usr_c021', name: 'James Jackson', email: 'james.jackson@birmingham.uk', phone: '+44 7788 990011', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-18T12:15:00Z' },
+  { id: 'usr_c022', name: 'Evelyn White', email: 'evelyn.white.tarot@gmail.com', phone: '+1 702 555 0144', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 9, registeredAt: '2026-10-19T14:35:00Z' },
+  { id: 'usr_c023', name: 'Alexander Harris', email: 'alex.harris.seeker@gmail.com', phone: '+44 7922 334411', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-20T17:05:00Z' },
+  { id: 'usr_c024', name: 'Abigail Martin', email: 'abigail.martin@leeds.uk', phone: '+44 7744 556677', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-21T08:50:00Z' },
+  { id: 'usr_c025', name: 'Henry Thompson', email: 'henry.thompson@melbourne.au', phone: '+61 411 234 567', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-10-22T11:40:00Z' },
+  { id: 'usr_c026', name: 'Emily Garcia', email: 'emily.garcia.stars@gmail.com', phone: '+1 619 555 0188', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-23T13:20:00Z' },
+  { id: 'usr_c027', name: 'Sebastian Martinez', email: 'sebastian.m@madrid.es', phone: '+34 600 123 456', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-24T16:10:00Z' },
+  { id: 'usr_c028', name: 'Elizabeth Robinson', email: 'elizabeth.robinson@bristol.uk', phone: '+44 7766 112233', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-10-24T19:45:00Z' },
+  { id: 'usr_c029', name: 'Jack Clark', email: 'jack.clark.vedic@gmail.com', phone: '+1 408 555 0155', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-25T10:30:00Z' },
+  { id: 'usr_c030', name: 'Sofia Rodriguez', email: 'sofia.rodriguez@miami.edu', phone: '+1 786 555 0122', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 10, registeredAt: '2026-10-25T14:15:00Z' },
+  { id: 'usr_c031', name: 'Owen Lewis', email: 'owen.lewis.uk@gmail.com', phone: '+44 7799 001122', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-26T09:00:00Z' },
+  { id: 'usr_c032', name: 'Avery Lee', email: 'avery.lee.cosmos@gmail.com', phone: '+1 206 555 0191', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-26T12:45:00Z' },
+  { id: 'usr_c033', name: 'Jackson Walker', email: 'jackson.walker@glasgow.uk', phone: '+44 7711 223344', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-27T15:30:00Z' },
+  { id: 'usr_c034', name: 'Scarlett Hall', email: 'scarlett.hall.tarot@outlook.com', phone: '+1 415 555 0139', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-27T18:10:00Z' },
+  { id: 'usr_c035', name: 'Samuel Allen', email: 'samuel.allen@chicago.io', phone: '+1 312 555 0187', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-28T11:20:00Z' },
+  { id: 'usr_c036', name: 'Grace Young', email: 'grace.young.guidance@gmail.com', phone: '+44 7733 889900', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-28T14:50:00Z' },
+  { id: 'usr_c037', name: 'Benjamin Hernandez', email: 'benjamin.h@losangeles.ca', phone: '+1 213 555 0111', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-29T09:15:00Z' },
+  { id: 'usr_c038', name: 'Ankush Seeker', email: 'bankush014@gmail.com', phone: '+91 98765 43210', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 14, registeredAt: '2026-10-29T11:00:00Z' }
+];
+
 // 6b. Admin Clients Management APIs
 app.get('/api/admin/clients', (_req: Request, res: Response) => {
   const clientMap = new Map<string, any>();
 
-  // Collect from registered db.customers
-  Object.values(db.customers).forEach(c => {
-    clientMap.set(c.id, {
-      id: c.id,
-      name: c.name || 'Valued Seeker',
-      email: c.email || `${c.name?.toLowerCase().replace(/[^a-z0-9]/g, '.') || 'client'}@example.com`,
-      phone: c.phone || '+44 7700 900142',
-      accountStatus: c.accountStatus || (c.freeMinutesUsed ? 'active' : 'free_tier'),
-      isFirstTimeUser: Boolean(c.isFirstTimeUser),
-      freeMinutesUsed: Boolean(c.freeMinutesUsed),
-      totalConsultations: c.totalConsultations || 0,
-      birthDetails: c.birthDetails,
-      registeredAt: c.registeredAt || '2026-09-15T12:00:00Z'
-    });
+  // Ensure default seeded clients exist in map
+  SEEDED_CLIENTS_LIST.forEach(seed => {
+    clientMap.set(seed.id, { ...seed });
   });
 
+  // Merge from registered db.customers (real accounts take precedence)
+  if (db.customers) {
+    Object.values(db.customers).forEach(c => {
+      if (!c.id) return;
+      clientMap.set(c.id, {
+        id: c.id,
+        name: c.name || 'Valued Seeker',
+        email: c.email || `${c.name?.toLowerCase().replace(/[^a-z0-9]/g, '.') || 'client'}@example.com`,
+        phone: c.phone || '+44 7700 900142',
+        accountStatus: (c as any).accountStatus || (c.freeMinutesUsed ? 'active' : 'free_tier'),
+        isFirstTimeUser: Boolean(c.isFirstTimeUser),
+        freeMinutesUsed: Boolean(c.freeMinutesUsed),
+        totalConsultations: (c as any).totalConsultations || 1,
+        birthDetails: (c as any).birthDetails,
+        registeredAt: (c as any).registeredAt || (c as any).createdAt || '2026-09-15T12:00:00Z'
+      });
+    });
+  }
+
   // Also include customers who initiated consultations
-  Object.values(db.sessions).forEach(s => {
-    if (s.customerId) {
-      const existing = clientMap.get(s.customerId);
-      if (existing) {
-        existing.totalConsultations = Math.max(existing.totalConsultations, 1);
-        if (s.customerName && existing.name === 'Valued Seeker') existing.name = s.customerName;
-      } else {
-        clientMap.set(s.customerId, {
-          id: s.customerId,
-          name: s.customerName || 'Seeker',
-          email: `${(s.customerName || 'seeker').toLowerCase().replace(/[^a-z0-9]/g, '.')}@example.com`,
-          phone: '+44 7700 900142',
-          accountStatus: 'active',
-          isFirstTimeUser: false,
-          freeMinutesUsed: true,
-          totalConsultations: 1,
-          birthDetails: s.birthDetails,
-          registeredAt: s.createdAt || new Date().toISOString()
-        });
+  if (db.sessions) {
+    Object.values(db.sessions).forEach(s => {
+      if (s.customerId) {
+        const existing = clientMap.get(s.customerId);
+        if (existing) {
+          existing.totalConsultations = Math.max(existing.totalConsultations, 1);
+          if (s.customerName && existing.name === 'Valued Seeker') existing.name = s.customerName;
+        } else {
+          clientMap.set(s.customerId, {
+            id: s.customerId,
+            name: s.customerName || 'Seeker',
+            email: `${(s.customerName || 'seeker').toLowerCase().replace(/[^a-z0-9]/g, '.')}@example.com`,
+            phone: '+44 7700 900142',
+            accountStatus: 'active',
+            isFirstTimeUser: false,
+            freeMinutesUsed: true,
+            totalConsultations: 1,
+            birthDetails: s.birthDetails,
+            registeredAt: s.createdAt || new Date().toISOString()
+          });
+        }
       }
-    }
-  });
+    });
+  }
 
   const clients = Array.from(clientMap.values());
   res.json({ clients, total: clients.length });
+});
+
+// Sync client account from local frontend into server db
+app.post('/api/admin/clients/sync', (req: Request, res: Response) => {
+  const { clients: incomingClients } = req.body;
+  if (Array.isArray(incomingClients)) {
+    incomingClients.forEach((inc: any) => {
+      if (inc && inc.id && inc.email) {
+        if (!db.customers) db.customers = {};
+        db.customers[inc.id] = {
+          id: inc.id,
+          name: inc.name || inc.email.split('@')[0],
+          email: inc.email.toLowerCase().trim(),
+          phone: inc.phone || '',
+          accountStatus: inc.accountStatus || 'active',
+          isFirstTimeUser: Boolean(inc.isFirstTimeUser),
+          freeMinutesUsed: Boolean(inc.freeMinutesUsed),
+          totalConsultations: Number(inc.totalConsultations) || 1,
+          createdAt: inc.registeredAt || new Date().toISOString()
+        } as any;
+      }
+    });
+    saveDB();
+  }
+  return res.json({ success: true, count: Object.keys(db.customers || {}).length });
 });
 
 app.get('/api/admin/clients/:id/chats', (req: Request, res: Response) => {
