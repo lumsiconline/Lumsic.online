@@ -762,7 +762,7 @@ export default function App() {
   };
 
 
-    setActiveSession(prev => prev ? ({ ...prev, messages: [...prev.messages, userMsg] }) : null);
+        setActiveSession(prev => prev ? ({ ...prev, messages: [...prev.messages, userMsg] }) : null);
 
     try {
       const res = await fetch(`/api/sessions/${activeSession.id}/message`, {
