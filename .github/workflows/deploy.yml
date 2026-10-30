@@ -37,8 +37,11 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: 'true'
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Supabase project URL and publishable key are public client configuration.
+          # Keep Actions secrets as overrides, with safe project-specific defaults so
+          # an unset repository secret cannot silently disable all authentication.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://gvbvzvghwjsqisggicmu.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_NkHgQrxAHQoZvBr6ODA3uA_bv878BHh' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
