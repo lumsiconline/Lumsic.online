@@ -592,16 +592,8 @@ export default function App() {
       return;
     }
 
-    // Authenticated user: immediately start the consultation chat on backend!
-    setSelectedIntakeReader(null);
-    const effectiveName = savedName.trim() || 'Valued Seeker';
-    createSession(reader, {
-      firstName: effectiveName,
-      fullName: effectiveName,
-      readingType: reader.category || 'Live Chat Consultation',
-      topic: 'Love, Career & Life Guidance',
-      question: `Hello ${reader.name}, I would love some intuitive guidance on my path today.`
-    });
+    // Always collect the customer's birth details before creating a human astrologer request.
+    setSelectedIntakeReader(reader);
   };
 
   const handleQuickStartConsultation = () => {
@@ -694,66 +686,26 @@ export default function App() {
 
     const sessionId = activeSession.id;
 
-    const userMsg: ChatMessage = {
-      id: 'msg_u_' + Date.now(),
-      sessionId,
-      sender: 'customer',
-      senderName: activeSession.customerName,
-      text: text.trim(),
-      timestamp: new Date().toISOString()
-    };
-
-    // Show the user's message immediately.
-    setActiveSession(prev =>
-      prev
-        ? { ...prev, messages: [...prev.messages, userMsg] }
-        : null
-    );
-
     try {
-      // Ask the existing server AI endpoint to generate a reply.
-      const res = await fetch('/api/chat/ai-message', {
+      // Send the customer's message to the human astrologer dashboard (no AI/chatbot).
+      const res = await fetch(`/api/sessions/${sessionId}/message`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId,
+          sender: 'customer',
+          senderName: activeSession.customerName,
           text: text.trim()
         })
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data.error || `Chat request failed (${res.status})`
-        );
-      }
-
-      // Keep the session synchronized if the server returns it.
+      if (!res.ok) throw new Error(data.error || `Chat request failed (${res.status})`);
       if (data.session) {
-        setActiveSession(prev => {
-          if (!prev || prev.id !== sessionId) return prev;
-
-          return {
-            ...data.session,
-            messages: data.session.messages?.length
-              ? data.session.messages
-              : prev.messages
-          };
-        });
+        setActiveSession(prev => prev && prev.id === sessionId ? data.session : prev);
       }
-
-      // LiveChatView uses this returned message to display the reply.
-      if (data.message) {
-        return data.message as ChatMessage;
-      }
-
-      console.warn('The AI endpoint returned no reply.');
-      return null;
+      return data.message as ChatMessage;
     } catch (err) {
-      console.error('Failed to send chat message:', err);
+      console.error('Failed to send message to astrologer:', err);
+      window.alert('Message could not be sent. Please try again.');
       return null;
     }
   };
