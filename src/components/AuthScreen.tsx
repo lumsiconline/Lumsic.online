@@ -748,7 +748,7 @@ const resolvedCurrency = selectedCountry.currency;
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="At least 6 characters"
+                      placeholder="At least 8 characters"
                       autoComplete="new-password"
                       required
                       disabled={isLoading}
@@ -910,32 +910,7 @@ const resolvedCurrency = selectedCountry.currency;
                 </p>
               </div>
 
-              {/* Instant Verification Code Card (if email delayed by filters) */}
-              {activeOtpCode && (
-                <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border border-amber-400/40 text-center shadow-lg">
-                  <div className="flex items-center justify-center gap-1 text-[11px] text-amber-300 font-bold mb-1">
-                    <Sparkles className="w-3 h-3 fill-amber-300" />
-                    <span>Reset Verification Code</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-3 my-1">
-                    <span className="font-mono text-2xl font-extrabold tracking-widest text-[#F6D06E]">
-                      {activeOtpCode}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setResetOtp(activeOtpCode)}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] shadow-xs cursor-pointer active:scale-95 transition-all"
-                    >
-                      Auto-Fill
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400">
-                    Also sent to your email (check inbox and spam folder)
-                  </p>
-                </div>
-              )}
-
-              <form onSubmit={handleForgotPasswordReset} className="space-y-3.5">
+                            <form onSubmit={handleForgotPasswordReset} className="space-y-3.5">
                 {/* 6-Digit OTP */}
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
