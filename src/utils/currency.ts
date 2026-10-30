@@ -83,83 +83,40 @@ export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD
  * Strict exclusion of India / INR.
  */
 export async function detectUserGeo(): Promise<CountryInfo> {
-  // Check if current domain is lumsic.in
-  if (typeof window !== 'undefined' && (window.location.hostname.includes('lumsic.in') || window.location.hostname.endsWith('.in'))) {
-    return COUNTRIES.find(c => c.code === 'IN') || COUNTRIES[0];
-  }
-
-  // 1. Check if user already manually selected
-  const savedCurrency = localStorage.getItem('astral_currency');
-  const savedCountryCode = localStorage.getItem('astral_country');
-
-  if (savedCountryCode) {
-    const found = COUNTRIES.find(c => c.code === savedCountryCode);
-    if (found) return found;
-  }
-  if (savedCurrency) {
-    const found = COUNTRIES.find(c => c.currency === savedCurrency);
-    if (found) return found;
-  }
-
-  // 2. Try server-side IP detection endpoint
   try {
-    const res = await fetch('/api/geo', { signal: AbortSignal.timeout(1800) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.country) {
-        const match = COUNTRIES.find(c => c.code.toUpperCase() === data.country.toUpperCase());
-        if (match) {
-          localStorage.setItem('astral_country', match.code);
-          localStorage.setItem('astral_currency', match.currency);
-          return match;
-        }
-      }
-    }
-  } catch {
-    // fallback to client heuristics
-  }
+    // Detect visitor country directly from their public IP
+    const response = await fetch('https://ipapi.co/json/', {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
 
-  // 3. Fallback to client browser timezone heuristic
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    const tzLower = tz.toLowerCase();
-    
-    if (tzLower.includes('kolkata') || tzLower.includes('calcutta') || tzLower.includes('asia/kolkata')) {
-      return COUNTRIES.find(c => c.code === 'IN')!;
+    if (!response.ok) {
+      throw new Error('IP location service unavailable');
     }
-    if (tzLower.includes('london') || tzLower.includes('belfast') || tzLower.includes('europe/london')) {
-      return COUNTRIES.find(c => c.code === 'GB')!;
-    }
-    if (
-      tzLower.includes('new_york') || 
-      tzLower.includes('los_angeles') || 
-      tzLower.includes('chicago') || 
-      tzLower.includes('denver') || 
-      tzLower.includes('phoenix') ||
-      tzLower.startsWith('america/')
-    ) {
-      return COUNTRIES.find(c => c.code === 'US')!;
-    }
-    if (tzLower.includes('toronto') || tzLower.includes('vancouver') || tzLower.includes('edmonton')) {
-      return COUNTRIES.find(c => c.code === 'CA')!;
-    }
-    if (tzLower.includes('sydney') || tzLower.includes('melbourne') || tzLower.includes('brisbane') || tzLower.includes('perth')) {
-      return COUNTRIES.find(c => c.code === 'AU')!;
-    }
-    if (tzLower.includes('paris') || tzLower.includes('berlin') || tzLower.includes('rome') || tzLower.includes('madrid')) {
-      return COUNTRIES.find(c => c.code === 'FR') || COUNTRIES.find(c => c.code === 'DE')!;
-    }
-    if (tzLower.includes('dubai') || tzLower.includes('abu_dhabi')) {
-      return COUNTRIES.find(c => c.code === 'AE')!;
-    }
-  } catch {
-    // ignore
-  }
 
-  // Default to US (USD) or India if accessed via .in
-  return COUNTRIES.find(c => c.code === 'US') || COUNTRIES[0];
+    const data = await response.json();
+    const countryCode = String(data.country_code || '').toUpperCase();
+
+    const match = COUNTRIES.find(
+      country => country.code.toUpperCase() === countryCode
+    );
+
+    if (!match) {
+      throw new Error('Country not supported: ' + countryCode);
+    }
+
+    // Save the latest IP-detected country and currency
+    localStorage.setItem('astral_country', match.code);
+    localStorage.setItem('astral_currency', match.currency);
+
+    return match;
+  } catch (error) {
+    console.error('IP country detection failed:', error);
+
+    // Fallback if IP detection is unavailable
+    return COUNTRIES.find(country => country.code === 'US') || COUNTRIES[0];
+  }
 }
-
 /**
  * Format rate per minute dynamically into the user's currency
  */

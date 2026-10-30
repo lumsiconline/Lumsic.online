@@ -5,7 +5,7 @@ import {
   Wallet, Flame, Compass, Layers, ShoppingBag, ArrowRight, User, Heart, Star, ShieldCheck
 } from 'lucide-react';
 import { LumysicLogo } from './LumysicLogo';
-import { getCurrencySymbol, SUPPORTED_CURRENCIES } from '../utils/currency';
+import { getCurrencySymbol } from '../utils/currency';
 
 export interface HeaderProps {
   onStartReading: () => void;
@@ -71,7 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [curDropdownOpen, setCurDropdownOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [showWalletTooltip, setShowWalletTooltip] = useState(false);
 
@@ -549,42 +548,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </AnimatePresence>
               </div>
 
-              {/* Currency Selector (Desktop) - Strictly Supported Non-INR Currencies */}
-              <div className="hidden xl:block relative shrink-0" data-currency-box>
-                <button
-                  type="button"
-                  onClick={() => setCurDropdownOpen(!curDropdownOpen)}
-                  className="px-2.5 py-1.5 h-9 sm:h-9.5 rounded-xl text-xs font-bold text-slate-200 hover:text-white bg-white/[0.04] border border-white/10 hover:border-white/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                  title="Change Currency"
-                >
-                  <span className="text-[#F5C542]">{currentCurrency}</span>
-                  <ChevronDown className="w-3 h-3 opacity-70" />
-                </button>
-
-                {curDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-44 bg-[#0B1030] border border-[#F5C542]/30 rounded-xl shadow-2xl p-1 z-50 text-xs">
-                    {SUPPORTED_CURRENCIES.map((c) => (
-                      <button
-                        key={c.code}
-                        type="button"
-                        onClick={() => {
-                          if (onSelectCurrency) onSelectCurrency(c.code);
-                          setCurDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-between ${
-                          currentCurrency === c.code ? 'text-[#F5C542] font-bold bg-white/5' : 'text-slate-300'
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <span>{c.label}</span>
-                          <span className="text-[10px] text-slate-400">({c.name})</span>
-                        </span>
-                        {currentCurrency === c.code && <Check className="w-3 h-3 text-[#F5C542]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Automatic Country-Based Currency Display */}
+<div className="hidden xl:flex items-center shrink-0 px-2.5 py-1.5 h-9 rounded-xl text-xs font-bold text-slate-200 bg-white/[0.04] border border-white/10">
+  <span className="text-[#F5C542]">{currentCurrency}</span>
+  <span className="ml-1 text-slate-400">Auto</span>
             </div>
           </div>
         </div>
@@ -717,9 +684,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <span className="text-[11px] text-slate-400">LUMSIC Sanctuary</span>
               </div>
-            </motion.div>
+          </motion.div>
           )}
-        </AnimatePresence>
+                </AnimatePresence>
+        </div>
       </header>
     </>
   );

@@ -120,7 +120,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     const cleanEmail = (user.email || emailAddress).trim().toLowerCase();
     const effectiveName = user.name || fullName || cleanEmail.split('@')[0] || 'Seeker';
     const effectivePhone = user.phone || `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
-    const resolvedCurrency = selectedCountry.code === 'GB' || selectedCountry.dialCode === '+44' ? 'GBP' : 'USD';
+const resolvedCurrency = selectedCountry.currency;
 
     localStorage.setItem('lumysic_is_logged_in', 'true');
     localStorage.setItem('astral_is_logged_in', 'true');
