@@ -4179,17 +4179,7 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     });
   }
 
-  // 2. AI Agent immediately greets the seeker under the astrologer name they chose
-  const aiGreeting = await generateAiPsychicGreeting(userName, requestedReader.name, birthDetails || cust.birthDetails);
-  initialMessages.push({
-    id: 'msg_greet_' + (now + 200),
-    sessionId,
-    sender: 'astrologer',
-    senderName: requestedReader.name,
-    text: aiGreeting,
-    timestamp: new Date(now + 200).toISOString(),
-    isAiMessage: true
-  });
+  // Human astrologer will send the first reply from the astrologer dashboard.
 
   const sessionToken = generateSecureToken('sess_key');
 
