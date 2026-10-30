@@ -386,247 +386,61 @@ export async function hashClientPassword(password: string, salt: string): Promis
  * Guaranteed zero "Failed to fetch" errors by combining server backend with local resilient storage.
  */
 export async function signupWithPassword(params: {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-  country?: string;
-  countryCode?: string;
-  currency?: string;
+  name: string; email: string; phone: string; password: string; confirmPassword: string;
+  country?: string; countryCode?: string; currency?: string;
 }): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanName = (params.name || '').trim();
-  const cleanPhone = (params.phone || '').trim();
-  const cleanPass = (params.password || '').trim();
-  const cleanConfirm = (params.confirmPassword || '').trim();
+  const name = (params.name || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  const phone = (params.phone || '').trim();
+  const password = params.password || '';
+  if (name.length < 2) return { success: false, error: 'Please enter your full name (at least 2 letters).' };
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (phone.replace(/\\D/g, '').length < 7) return { success: false, error: 'Please enter a valid contact number.' };
+  if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters long.' };
+  if (password !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  // Validate fields
-  if (!cleanName || cleanName.length < 2) {
-    return { success: false, error: 'Please enter your full name (at least 2 letters).' };
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: {
+      full_name: name, phone,
+      country: params.country || '',
+      country_code: params.countryCode || '',
+      currency: params.currency || ''
+    }}
+  });
+  if (error) return { success: false, error: error.message };
+  if (!data.user) return { success: false, error: 'Signup could not be completed. Please try again.' };
+  if (!data.session) {
+    return { success: false, error: 'Account created. Please verify your email using the link we sent, then log in.' };
   }
-  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-    return { success: false, error: 'Please enter a valid email address.' };
-  }
-  if (!cleanPhone || cleanPhone.replace(/\D/g, '').length < 7) {
-    return { success: false, error: 'Please enter a valid contact number (at least 7 digits).' };
-  }
-  if (!cleanPass || cleanPass.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters long.' };
-  }
-  if (cleanPass !== cleanConfirm) {
-    return { success: false, error: 'Passwords do not match. Please re-enter.' };
-  }
-
-  // 1. Check local registered accounts store to prevent duplicate accounts instantly
-  const localAccounts = getLocalAccounts();
-  if (localAccounts[cleanEmail]) {
-    return { success: false, error: 'Account already exists. Please log in.' };
-  }
-
-  // 2. Attempt backend server signup
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/signup'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        password: cleanPass,
-        confirmPassword: cleanConfirm,
-        country: params.country || 'GB',
-        countryCode: params.countryCode || '+44',
-        currency: params.currency || 'GBP'
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-
-    // If duplicate on server
-    if (res.status === 409 || (data && data.error && data.error.includes('already exists'))) {
-      return { success: false, error: 'Account already exists. Please log in.' };
-    }
-
-    if (res.ok && data.success && data.user) {
-      // Synchronize into local accounts cache
-      const salt = Math.random().toString(36).substring(2, 15);
-      const hash = await hashClientPassword(cleanPass, salt);
-      localAccounts[cleanEmail] = {
-        id: data.user.id,
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        passwordSalt: salt,
-        passwordHash: hash,
-        country: params.country || 'GB',
-        countryCode: params.countryCode || '+44',
-        currency: params.currency || 'GBP',
-        role: data.user.role || 'user',
-        isAdmin: Boolean(data.user.isAdmin),
-        createdAt: new Date().toISOString()
-      };
-      saveLocalAccounts(localAccounts);
-
-      return { success: true, user: data.user, session: data.session };
-    }
-
-    if (!res.ok && data && data.error) {
-      return { success: false, error: data.error };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend server /api/auth/signup unreachable, activating client resilience:', backendErr);
-  }
-
-  // 3. Fallback: Resilient local creation (guarantees signup succeeds without "Failed to fetch" on static hosting)
-  try {
-    const salt = Math.random().toString(36).substring(2, 15);
-    const hash = await hashClientPassword(cleanPass, salt);
-    const userId = 'usr_' + (typeof btoa !== 'undefined' ? btoa(cleanEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) : Date.now().toString());
-    const isOwner = cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com';
-
-    const newAcc: LocalCustomerAccount = {
-      id: userId,
-      name: cleanName,
-      email: cleanEmail,
-      phone: cleanPhone,
-      passwordSalt: salt,
-      passwordHash: hash,
-      country: params.country || 'GB',
-      countryCode: params.countryCode || '+44',
-      currency: params.currency || 'GBP',
-      role: isOwner ? 'admin' : 'user',
-      isAdmin: isOwner,
-      createdAt: new Date().toISOString()
-    };
-
-    localAccounts[cleanEmail] = newAcc;
-    saveLocalAccounts(localAccounts);
-
-    const userObj = {
-      id: userId,
-      name: cleanName,
-      email: cleanEmail,
-      phone: cleanPhone,
-      country: params.country || 'GB',
-      countryCode: params.countryCode || '+44',
-      currency: params.currency || 'GBP',
-      role: isOwner ? 'admin' : 'user',
-      isAdmin: isOwner
-    };
-
-    return {
-      success: true,
-      user: userObj,
-      session: {
-        access_token: 'auth_jwt_' + userId + '_' + Date.now(),
-        user: { id: userId, email: cleanEmail }
-      }
-    };
-  } catch (err: any) {
-    return { success: false, error: 'Registration failed. Please check your details and try again.' };
-  }
+  return { success: true, user: {
+    id: data.user.id, name, email, phone,
+    country: params.country || '', countryCode: params.countryCode || '',
+    currency: params.currency || '', role: 'user', isAdmin: false
+  }, session: data.session };
 }
 
-/**
- * Log in existing user with Email and Password ONLY (NO OTP).
- * Zero "Failed to fetch" by verifying against backend and local store.
- */
+/** Authenticate only with a real Supabase Auth session. No local-password fallback. */
 export async function loginWithPassword(params: {
-  email: string;
-  password: string;
+  email: string; password: string;
 }): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanPass = (params.password || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  if (!email) return { success: false, error: 'Please enter your email address.' };
+  if (!params.password) return { success: false, error: 'Please enter your password.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  if (!cleanEmail) {
-    return { success: false, error: 'Please enter your email address.' };
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: params.password });
+  if (error || !data.user || !data.session) {
+    return { success: false, error: error?.message || 'Invalid email or password.' };
   }
-  if (!cleanPass) {
-    return { success: false, error: 'Please enter your password.' };
-  }
-
-  // 1. Try backend server login
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/login'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success && data.user) {
-      // Sync into local account cache
-      const localAccounts = getLocalAccounts();
-      const salt = Math.random().toString(36).substring(2, 15);
-      const hash = await hashClientPassword(cleanPass, salt);
-      localAccounts[cleanEmail] = {
-        id: data.user.id,
-        name: data.user.name || cleanEmail.split('@')[0],
-        email: cleanEmail,
-        phone: data.user.phone || '',
-        passwordSalt: salt,
-        passwordHash: hash,
-        country: data.user.country || 'GB',
-        countryCode: data.user.countryCode || '+44',
-        currency: data.user.currency || 'GBP',
-        role: data.user.role || 'user',
-        isAdmin: Boolean(data.user.isAdmin),
-        createdAt: new Date().toISOString()
-      };
-      saveLocalAccounts(localAccounts);
-
-      return { success: true, user: data.user, session: data.session };
-    }
-
-    if (res.status === 401) {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend server /api/auth/login unreachable, verifying against local cache:', backendErr);
-  }
-
-  // 2. Resilient fallback: Verify against local accounts store
-  const localAccounts = getLocalAccounts();
-  const account = localAccounts[cleanEmail];
-
-  if (account) {
-    const candidateHash = await hashClientPassword(cleanPass, account.passwordSalt);
-    if (candidateHash === account.passwordHash) {
-      return {
-        success: true,
-        user: {
-          id: account.id,
-          name: account.name,
-          email: account.email,
-          phone: account.phone,
-          country: account.country,
-          countryCode: account.countryCode,
-          currency: account.currency,
-          role: account.role,
-          isAdmin: account.isAdmin
-        },
-        session: {
-          access_token: 'auth_jwt_' + account.id + '_' + Date.now(),
-          user: { id: account.id, email: cleanEmail }
-        }
-      };
-    } else {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-  }
-
-  return { success: false, error: 'Invalid email or password.' };
+  const meta = data.user.user_metadata || {};
+  return { success: true, session: data.session, user: {
+    id: data.user.id, email: data.user.email || email,
+    name: meta.full_name || email.split('@')[0], phone: meta.phone || '',
+    country: meta.country || '', countryCode: meta.country_code || '',
+    currency: meta.currency || '', role: 'user', isAdmin: false
+  }};
 }
 
 /**
