@@ -130,7 +130,7 @@ export async function sendEmailOtp(
   _details?: { fullName?: string; phone?: string }
 ): Promise<{ success: boolean; error?: string; message?: string; otpCode?: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(cleanEmail)) {
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid email address.' };
   }
   return {
@@ -311,8 +311,8 @@ export async function signupWithPassword(params: {
   const phone = (params.phone || '').trim();
   const password = params.password || '';
   if (name.length < 2) return { success: false, error: 'Please enter your full name (at least 2 letters).' };
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
-  if (phone.replace(/\\D/g, '').length < 7) return { success: false, error: 'Please enter a valid contact number.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (phone.replace(/\D/g, '').length < 7) return { success: false, error: 'Please enter a valid contact number.' };
   if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters long.' };
   if (password !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
   if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
@@ -367,7 +367,7 @@ export async function requestForgotPasswordOtp(email: string): Promise<{
   success: boolean; message?: string; error?: string;
 }> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(cleanEmail)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid registered email address.' };
   }
   if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
@@ -384,8 +384,8 @@ export async function resetPasswordWithOtp(params: {
   const email = (params.email || '').trim().toLowerCase();
   const otp = (params.otp || '').trim();
   const newPassword = params.newPassword || '';
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
-  if (!/^\\d{6}$/.test(otp)) return { success: false, error: 'Enter the 6-digit code from your reset email.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (!/^\d{6}$/.test(otp)) return { success: false, error: 'Enter the 6-digit code from your reset email.' };
   if (newPassword.length < 8) return { success: false, error: 'New password must be at least 8 characters long.' };
   if (newPassword !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
   if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
