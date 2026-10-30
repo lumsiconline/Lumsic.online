@@ -626,71 +626,68 @@ export default function App() {
 
   const createSession = async (reader: Reader, startData?: Partial<ConsultationStartData>) => {
     const targetReader = reader || readers[0];
+    if (!targetReader) {
+      window.alert('No astrologer is available right now. Please try again shortly.');
+      return;
+    }
+
     const customerId = customer.id || localStorage.getItem('astral_customer_id') || ('cust_' + Date.now());
     const userName = startData?.firstName || startData?.fullName || customer.name || localStorage.getItem('lumysic_user_name') || 'Valued Seeker';
     const userGender = startData?.birthDetails?.gender || startData?.gender || 'Not specified';
     const userDob = startData?.birthDetails?.dob || 'Not specified';
-    const userTob = startData?.birthDetails?.unknownTime 
-      ? 'Not known' 
+    const userTob = startData?.birthDetails?.unknownTime
+      ? 'Not known'
       : (startData?.birthDetails?.birthTime ? `${startData.birthDetails.birthTime} ${startData.birthDetails.amPm || ''}`.trim() : 'Not specified');
     const userPob = startData?.birthDetails?.placeOfBirth || 'Not specified';
 
     try {
-      const res = await fetch('/api/sessions/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId,
-          firstName: userName,
-          customerName: userName,
-          readingType: startData?.readingType || targetReader.category || 'Live Consultation',
-          topic: startData?.topic || 'Love, Career & Life Guidance',
-          initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
-          birthDetails: startData?.birthDetails || {
-            name: userName,
-            gender: userGender,
-            dob: userDob,
-            birthTime: userTob,
-            placeOfBirth: userPob
-          },
-          requestedReaderId: targetReader.id
-        })
-      });
-      const data = await res.json();
-      if (data && data.session) {
-        setActiveSession(data.session);
-        setIsChatOpen(true);
-        return;
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
+      let res: Response;
+      try {
+        res = await fetch('/api/sessions/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            customerId,
+            firstName: userName,
+            customerName: userName,
+            readingType: startData?.readingType || targetReader.category || 'Live Consultation',
+            topic: startData?.topic || 'Love, Career & Life Guidance',
+            initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
+            birthDetails: startData?.birthDetails || {
+              name: userName,
+              gender: userGender,
+              dob: userDob,
+              birthTime: userTob,
+              placeOfBirth: userPob
+            },
+            requestedReaderId: targetReader.id
+          })
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
       }
-    } catch (err) {
-      console.warn('Backend session create failed, retrying free-chat endpoint:', err);
-    }
 
-    // Secondary fallback: guaranteed server registration via /api/user/free-chat/start
-    try {
-      const freeRes = await fetch('/api/user/free-chat/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId,
-          customerName: userName,
-          topic: startData?.topic || 'Life Guidance',
-          question: startData?.question || `Hello ${targetReader.name}, I would love intuitive guidance on my life path.`,
-          targetHumanReaderId: targetReader.id,
-          targetHumanReaderName: targetReader.name
-        })
-      });
-      const freeData = await freeRes.json();
-      if (freeData && freeData.session) {
-        setActiveSession(freeData.session);
-        setIsChatOpen(true);
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `Server error (${res.status})`);
       }
-    } catch (e) {
-      console.error('Free-chat endpoint error:', e);
+      if (!data?.session?.id) {
+        throw new Error(data?.error || 'The server did not create a chat session. Please try again.');
+      }
+
+      setActiveSession(data.session);
+      setIsChatOpen(true);
+    } catch (err: any) {
+      console.error('Chat session creation failed:', err);
+      const message = err?.name === 'AbortError'
+        ? 'Chat server is taking too long to respond. Please try again in a moment.'
+        : (err?.message || 'Unable to start chat. Please try again.');
+      window.alert(message);
     }
   };
-
   
   const handleSendMessage = async (text: string) => {
     if (!activeSession || !text.trim()) return null;
