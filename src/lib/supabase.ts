@@ -50,7 +50,7 @@ function resolveSupabaseUrl(url?: string, key?: string): string {
     return `https://${projectRef}.supabase.co`;
   }
 
-  return 'https://egvooldvaswcyawobucs.supabase.co';
+  return 'https://gvbvzvghwjsqisggicmu.supabase.co';
 }
 
 export const supabaseUrl = resolveSupabaseUrl(rawSupabaseUrl, rawSupabaseAnonKey);
@@ -82,7 +82,7 @@ function createSafeSupabaseClient(): SupabaseClient {
     });
   } catch (err) {
     console.warn('Supabase initialization warning:', err);
-    return createClient('https://egvooldvaswcyawobucs.supabase.co', 'placeholder-anon-key', {
+    return createClient('https://gvbvzvghwjsqisggicmu.supabase.co', 'placeholder-anon-key', {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -121,117 +121,34 @@ export function getBackendApiUrl(path: string): string {
  * Send 6-digit numeric OTP to the user's email address.
  * Uses reliable server-authoritative engine with graceful fallback.
  */
+/**
+ * Legacy signup OTP helper disabled: authentication must use Supabase Auth,
+ * never a client-generated/demo code or a fake success response.
+ */
 export async function sendEmailOtp(
-  email: string, 
-  details?: { fullName?: string; phone?: string }
+  email: string,
+  _details?: { fullName?: string; phone?: string }
 ): Promise<{ success: boolean; error?: string; message?: string; otpCode?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid email address.' };
   }
-
-  // 1. Primary: Use our robust backend OTP service
-  try {
-    const url = getBackendApiUrl('/api/auth/otp/send');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: cleanEmail, 
-        fullName: details?.fullName,
-        phone: details?.phone
-      })
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        return { success: true, message: data.message, otpCode: data.otpCode };
-      }
-      return { success: false, error: data.error || 'Failed to send OTP.' };
-    }
-  } catch (err: any) {
-    console.warn('Backend OTP API error, using instant code fallback:', err);
-  }
-
-  // 2. Fallback: Default success response with instant backup code
-  return { 
-    success: true, 
-    message: 'Verification code generated.', 
-    otpCode: '123456' 
+  return {
+    success: false,
+    error: 'Signup email OTP is disabled. Please use the configured Supabase Auth signup flow.'
   };
 }
 
 /**
- * Verify 6-digit email OTP with backend authentication service
+ * Legacy signup OTP verification disabled. Only Supabase-issued OTPs may be accepted.
  */
 export async function verifyEmailOtp(
-  email: string, 
-  token: string
+  _email: string,
+  _token: string
 ): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanToken = token.trim();
-
-  if (!cleanToken || cleanToken.length < 6) {
-    return { success: false, error: 'Please enter all 6 digits of your verification code.' };
-  }
-
-  // 1. Master bypass codes for instant development & production reliability
-  if (cleanToken === '123456' || cleanToken === '000000') {
-    const fallbackId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
-    return {
-      success: true,
-      user: {
-        id: fallbackId,
-        email: cleanEmail,
-        role: cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com' ? 'admin' : 'user'
-      },
-      session: {
-        access_token: 'auth_' + Date.now(),
-        user: { id: fallbackId, email: cleanEmail }
-      }
-    };
-  }
-
-  // 2. Primary: Verify through our server backend
-  try {
-    const url = getBackendApiUrl('/api/auth/otp/verify');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: cleanEmail, 
-        token: cleanToken 
-      })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.user) {
-        return { 
-          success: true, 
-          user: data.user, 
-          session: data.session 
-        };
-      }
-    }
-  } catch (err: any) {
-    console.warn('Backend OTP verification error, checking fallback:', err);
-  }
-
-  // 3. Graceful fallback for 6-digit codes to guarantee login success
-  const fallbackId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
   return {
-    success: true,
-    user: {
-      id: fallbackId,
-      email: cleanEmail,
-      role: cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com' ? 'admin' : 'user'
-    },
-    session: {
-      access_token: 'auth_' + Date.now(),
-      user: { id: fallbackId, email: cleanEmail }
-    }
+    success: false,
+    error: 'Demo OTP verification is disabled. Please request a real verification code.'
   };
 }
 
@@ -386,405 +303,97 @@ export async function hashClientPassword(password: string, salt: string): Promis
  * Guaranteed zero "Failed to fetch" errors by combining server backend with local resilient storage.
  */
 export async function signupWithPassword(params: {
-  name: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-  country?: string;
-  countryCode?: string;
-  currency?: string;
+  name: string; email: string; phone: string; password: string; confirmPassword: string;
+  country?: string; countryCode?: string; currency?: string;
 }): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanName = (params.name || '').trim();
-  const cleanPhone = (params.phone || '').trim();
-  const cleanPass = (params.password || '').trim();
-  const cleanConfirm = (params.confirmPassword || '').trim();
+  const name = (params.name || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  const phone = (params.phone || '').trim();
+  const password = params.password || '';
+  if (name.length < 2) return { success: false, error: 'Please enter your full name (at least 2 letters).' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (phone.replace(/\D/g, '').length < 7) return { success: false, error: 'Please enter a valid contact number.' };
+  if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters long.' };
+  if (password !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  // Validate fields
-  if (!cleanName || cleanName.length < 2) {
-    return { success: false, error: 'Please enter your full name (at least 2 letters).' };
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: {
+      full_name: name, phone,
+      country: params.country || '',
+      country_code: params.countryCode || '',
+      currency: params.currency || ''
+    }}
+  });
+  if (error) return { success: false, error: error.message };
+  if (!data.user) return { success: false, error: 'Signup could not be completed. Please try again.' };
+  if (!data.session) {
+    return { success: false, error: 'Account created. Please verify your email using the link we sent, then log in.' };
   }
-  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-    return { success: false, error: 'Please enter a valid email address.' };
-  }
-  if (!cleanPhone || cleanPhone.replace(/\D/g, '').length < 7) {
-    return { success: false, error: 'Please enter a valid contact number (at least 7 digits).' };
-  }
-  if (!cleanPass || cleanPass.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters long.' };
-  }
-  if (cleanPass !== cleanConfirm) {
-    return { success: false, error: 'Passwords do not match. Please re-enter.' };
-  }
-
-  // 1. Check local registered accounts store to prevent duplicate accounts instantly
-  const localAccounts = getLocalAccounts();
-  if (localAccounts[cleanEmail]) {
-    return { success: false, error: 'Account already exists. Please log in.' };
-  }
-
-  // 2. Attempt backend server signup
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/signup'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        password: cleanPass,
-        confirmPassword: cleanConfirm,
-        country: params.country || 'GB',
-        countryCode: params.countryCode || '+44',
-        currency: params.currency || 'GBP'
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-
-    // If duplicate on server
-    if (res.status === 409 || (data && data.error && data.error.includes('already exists'))) {
-      return { success: false, error: 'Account already exists. Please log in.' };
-    }
-
-    if (res.ok && data.success && data.user) {
-      // Synchronize into local accounts cache
-      const salt = Math.random().toString(36).substring(2, 15);
-      const hash = await hashClientPassword(cleanPass, salt);
-      localAccounts[cleanEmail] = {
-        id: data.user.id,
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        passwordSalt: salt,
-        passwordHash: hash,
-        country: params.country || 'GB',
-        countryCode: params.countryCode || '+44',
-        currency: params.currency || 'GBP',
-        role: data.user.role || 'user',
-        isAdmin: Boolean(data.user.isAdmin),
-        createdAt: new Date().toISOString()
-      };
-      saveLocalAccounts(localAccounts);
-
-      return { success: true, user: data.user, session: data.session };
-    }
-
-    if (!res.ok && data && data.error) {
-      return { success: false, error: data.error };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend server /api/auth/signup unreachable, activating client resilience:', backendErr);
-  }
-
-  // 3. Fallback: Resilient local creation (guarantees signup succeeds without "Failed to fetch" on static hosting)
-  try {
-    const salt = Math.random().toString(36).substring(2, 15);
-    const hash = await hashClientPassword(cleanPass, salt);
-    const userId = 'usr_' + (typeof btoa !== 'undefined' ? btoa(cleanEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) : Date.now().toString());
-    const isOwner = cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com';
-
-    const newAcc: LocalCustomerAccount = {
-      id: userId,
-      name: cleanName,
-      email: cleanEmail,
-      phone: cleanPhone,
-      passwordSalt: salt,
-      passwordHash: hash,
-      country: params.country || 'GB',
-      countryCode: params.countryCode || '+44',
-      currency: params.currency || 'GBP',
-      role: isOwner ? 'admin' : 'user',
-      isAdmin: isOwner,
-      createdAt: new Date().toISOString()
-    };
-
-    localAccounts[cleanEmail] = newAcc;
-    saveLocalAccounts(localAccounts);
-
-    const userObj = {
-      id: userId,
-      name: cleanName,
-      email: cleanEmail,
-      phone: cleanPhone,
-      country: params.country || 'GB',
-      countryCode: params.countryCode || '+44',
-      currency: params.currency || 'GBP',
-      role: isOwner ? 'admin' : 'user',
-      isAdmin: isOwner
-    };
-
-    return {
-      success: true,
-      user: userObj,
-      session: {
-        access_token: 'auth_jwt_' + userId + '_' + Date.now(),
-        user: { id: userId, email: cleanEmail }
-      }
-    };
-  } catch (err: any) {
-    return { success: false, error: 'Registration failed. Please check your details and try again.' };
-  }
+  return { success: true, user: {
+    id: data.user.id, name, email, phone,
+    country: params.country || '', countryCode: params.countryCode || '',
+    currency: params.currency || '', role: 'user', isAdmin: false
+  }, session: data.session };
 }
 
-/**
- * Log in existing user with Email and Password ONLY (NO OTP).
- * Zero "Failed to fetch" by verifying against backend and local store.
- */
+/** Authenticate only with a real Supabase Auth session. No local-password fallback. */
 export async function loginWithPassword(params: {
-  email: string;
-  password: string;
+  email: string; password: string;
 }): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanPass = (params.password || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  if (!email) return { success: false, error: 'Please enter your email address.' };
+  if (!params.password) return { success: false, error: 'Please enter your password.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  if (!cleanEmail) {
-    return { success: false, error: 'Please enter your email address.' };
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: params.password });
+  if (error || !data.user || !data.session) {
+    return { success: false, error: error?.message || 'Invalid email or password.' };
   }
-  if (!cleanPass) {
-    return { success: false, error: 'Please enter your password.' };
-  }
-
-  // 1. Try backend server login
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/login'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success && data.user) {
-      // Sync into local account cache
-      const localAccounts = getLocalAccounts();
-      const salt = Math.random().toString(36).substring(2, 15);
-      const hash = await hashClientPassword(cleanPass, salt);
-      localAccounts[cleanEmail] = {
-        id: data.user.id,
-        name: data.user.name || cleanEmail.split('@')[0],
-        email: cleanEmail,
-        phone: data.user.phone || '',
-        passwordSalt: salt,
-        passwordHash: hash,
-        country: data.user.country || 'GB',
-        countryCode: data.user.countryCode || '+44',
-        currency: data.user.currency || 'GBP',
-        role: data.user.role || 'user',
-        isAdmin: Boolean(data.user.isAdmin),
-        createdAt: new Date().toISOString()
-      };
-      saveLocalAccounts(localAccounts);
-
-      return { success: true, user: data.user, session: data.session };
-    }
-
-    if (res.status === 401) {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend server /api/auth/login unreachable, verifying against local cache:', backendErr);
-  }
-
-  // 2. Resilient fallback: Verify against local accounts store
-  const localAccounts = getLocalAccounts();
-  const account = localAccounts[cleanEmail];
-
-  if (account) {
-    const candidateHash = await hashClientPassword(cleanPass, account.passwordSalt);
-    if (candidateHash === account.passwordHash) {
-      return {
-        success: true,
-        user: {
-          id: account.id,
-          name: account.name,
-          email: account.email,
-          phone: account.phone,
-          country: account.country,
-          countryCode: account.countryCode,
-          currency: account.currency,
-          role: account.role,
-          isAdmin: account.isAdmin
-        },
-        session: {
-          access_token: 'auth_jwt_' + account.id + '_' + Date.now(),
-          user: { id: account.id, email: cleanEmail }
-        }
-      };
-    } else {
-      return { success: false, error: 'Invalid email or password.' };
-    }
-  }
-
-  return { success: false, error: 'Invalid email or password.' };
+  const meta = data.user.user_metadata || {};
+  return { success: true, session: data.session, user: {
+    id: data.user.id, email: data.user.email || email,
+    name: meta.full_name || email.split('@')[0], phone: meta.phone || '',
+    country: meta.country || '', countryCode: meta.country_code || '',
+    currency: meta.currency || '', role: 'user', isAdmin: false
+  }};
 }
 
 /**
- * Request Password Reset OTP to registered email
+ * Request a Supabase recovery email. The Supabase Recovery email template must contain {{ .Token }} to deliver a 6-digit OTP.
  */
 export async function requestForgotPasswordOtp(email: string): Promise<{
-  success: boolean;
-  message?: string;
-  otpCode?: string;
-  error?: string;
+  success: boolean; message?: string; error?: string;
 }> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid registered email address.' };
   }
-
-  // 1. Try server backend
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/forgot-password/request'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      return { success: true, message: data.message, otpCode: data.otpCode };
-    }
-    if (res.status === 404 || (data && data.error && data.error.includes('No account found'))) {
-      return { success: false, error: 'No account found with this email address.' };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend forgot-password unreachable, using local store:', backendErr);
-  }
-
-  // 2. Local fallback
-  const localAccounts = getLocalAccounts();
-  if (!localAccounts[cleanEmail]) {
-    return { success: false, error: 'No account found with this email address. Please sign up.' };
-  }
-
-  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-  try {
-    const rawOtps = localStorage.getItem(RESET_OTP_STORAGE_KEY);
-    const otps = rawOtps ? JSON.parse(rawOtps) : {};
-    otps[cleanEmail] = {
-      code: generatedOtp,
-      expiresAt: Date.now() + 10 * 60 * 1000
-    };
-    localStorage.setItem(RESET_OTP_STORAGE_KEY, JSON.stringify(otps));
-  } catch {}
-
-  return {
-    success: true,
-    message: `Password reset code sent to ${cleanEmail}. (Code: ${generatedOtp})`,
-    otpCode: generatedOtp
-  };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: 'Password reset instructions have been sent if this email is registered.' };
 }
 
-/**
- * Verify Reset OTP and Set New Password
- */
 export async function resetPasswordWithOtp(params: {
-  email: string;
-  otp: string;
-  newPassword: string;
-  confirmPassword: string;
+  email: string; otp: string; newPassword: string; confirmPassword: string;
 }): Promise<{ success: boolean; message?: string; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanOtp = (params.otp || '').trim();
-  const newPass = (params.newPassword || '').trim();
-  const confirmPass = (params.confirmPassword || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  const otp = (params.otp || '').trim();
+  const newPassword = params.newPassword || '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (!/^\d{6}$/.test(otp)) return { success: false, error: 'Enter the 6-digit code from your reset email.' };
+  if (newPassword.length < 8) return { success: false, error: 'New password must be at least 8 characters long.' };
+  if (newPassword !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  if (!cleanEmail) {
-    return { success: false, error: 'Email is required.' };
-  }
-  if (!cleanOtp || cleanOtp.length < 6) {
-    return { success: false, error: 'Please enter the 6-digit reset code.' };
-  }
-  if (!newPass || newPass.length < 6) {
-    return { success: false, error: 'New password must be at least 6 characters long.' };
-  }
-  if (newPass !== confirmPass) {
-    return { success: false, error: 'Passwords do not match. Please re-enter.' };
-  }
-
-  // 1. Try server backend
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/forgot-password/reset'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: cleanEmail,
-        otp: cleanOtp,
-        newPassword: newPass,
-        confirmPassword: confirmPass
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      const localAccounts = getLocalAccounts();
-      if (localAccounts[cleanEmail]) {
-        const salt = Math.random().toString(36).substring(2, 15);
-        const hash = await hashClientPassword(newPass, salt);
-        localAccounts[cleanEmail].passwordSalt = salt;
-        localAccounts[cleanEmail].passwordHash = hash;
-        saveLocalAccounts(localAccounts);
-      }
-      return { success: true, message: data.message };
-    }
-    if (!res.ok && data && data.error) {
-      return { success: false, error: data.error };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend reset password unreachable, checking local store:', backendErr);
-  }
-
-  // 2. Local fallback
-  const isMaster = cleanOtp === '123456' || cleanOtp === '000000';
-  let isMatching = false;
-
-  try {
-    const rawOtps = localStorage.getItem(RESET_OTP_STORAGE_KEY);
-    const otps = rawOtps ? JSON.parse(rawOtps) : {};
-    const record = otps[cleanEmail];
-    if (record && record.code === cleanOtp && record.expiresAt > Date.now()) {
-      isMatching = true;
-      delete otps[cleanEmail];
-      localStorage.setItem(RESET_OTP_STORAGE_KEY, JSON.stringify(otps));
-    }
-  } catch {}
-
-  if (!isMatching && !isMaster) {
-    return { success: false, error: 'Invalid or expired verification code.' };
-  }
-
-  const localAccounts = getLocalAccounts();
-  if (localAccounts[cleanEmail]) {
-    const salt = Math.random().toString(36).substring(2, 15);
-    const hash = await hashClientPassword(newPass, salt);
-    localAccounts[cleanEmail].passwordSalt = salt;
-    localAccounts[cleanEmail].passwordHash = hash;
-    saveLocalAccounts(localAccounts);
-  }
-
-  return {
-    success: true,
-    message: 'Password reset successfully! You can now log in with your new password.'
-  };
+  const { error: verifyError } = await supabase.auth.verifyOtp({ email, token: otp, type: 'recovery' });
+  if (verifyError) return { success: false, error: verifyError.message };
+  const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+  if (updateError) return { success: false, error: updateError.message };
+  await supabase.auth.signOut();
+  return { success: true, message: 'Password reset successfully. Please log in with your new password.' };
 }
