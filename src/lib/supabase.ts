@@ -121,117 +121,34 @@ export function getBackendApiUrl(path: string): string {
  * Send 6-digit numeric OTP to the user's email address.
  * Uses reliable server-authoritative engine with graceful fallback.
  */
+/**
+ * Legacy signup OTP helper disabled: authentication must use Supabase Auth,
+ * never a client-generated/demo code or a fake success response.
+ */
 export async function sendEmailOtp(
-  email: string, 
-  details?: { fullName?: string; phone?: string }
+  email: string,
+  _details?: { fullName?: string; phone?: string }
 ): Promise<{ success: boolean; error?: string; message?: string; otpCode?: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+  if (!cleanEmail || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid email address.' };
   }
-
-  // 1. Primary: Use our robust backend OTP service
-  try {
-    const url = getBackendApiUrl('/api/auth/otp/send');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: cleanEmail, 
-        fullName: details?.fullName,
-        phone: details?.phone
-      })
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        return { success: true, message: data.message, otpCode: data.otpCode };
-      }
-      return { success: false, error: data.error || 'Failed to send OTP.' };
-    }
-  } catch (err: any) {
-    console.warn('Backend OTP API error, using instant code fallback:', err);
-  }
-
-  // 2. Fallback: Default success response with instant backup code
-  return { 
-    success: true, 
-    message: 'Verification code generated.', 
-    otpCode: '123456' 
+  return {
+    success: false,
+    error: 'Signup email OTP is disabled. Please use the configured Supabase Auth signup flow.'
   };
 }
 
 /**
- * Verify 6-digit email OTP with backend authentication service
+ * Legacy signup OTP verification disabled. Only Supabase-issued OTPs may be accepted.
  */
 export async function verifyEmailOtp(
-  email: string, 
-  token: string
+  _email: string,
+  _token: string
 ): Promise<{ success: boolean; user?: any; session?: any; error?: string }> {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanToken = token.trim();
-
-  if (!cleanToken || cleanToken.length < 6) {
-    return { success: false, error: 'Please enter all 6 digits of your verification code.' };
-  }
-
-  // 1. Master bypass codes for instant development & production reliability
-  if (cleanToken === '123456' || cleanToken === '000000') {
-    const fallbackId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
-    return {
-      success: true,
-      user: {
-        id: fallbackId,
-        email: cleanEmail,
-        role: cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com' ? 'admin' : 'user'
-      },
-      session: {
-        access_token: 'auth_' + Date.now(),
-        user: { id: fallbackId, email: cleanEmail }
-      }
-    };
-  }
-
-  // 2. Primary: Verify through our server backend
-  try {
-    const url = getBackendApiUrl('/api/auth/otp/verify');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        email: cleanEmail, 
-        token: cleanToken 
-      })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.user) {
-        return { 
-          success: true, 
-          user: data.user, 
-          session: data.session 
-        };
-      }
-    }
-  } catch (err: any) {
-    console.warn('Backend OTP verification error, checking fallback:', err);
-  }
-
-  // 3. Graceful fallback for 6-digit codes to guarantee login success
-  const fallbackId = 'usr_' + Buffer.from(cleanEmail).toString('hex').slice(0, 16);
   return {
-    success: true,
-    user: {
-      id: fallbackId,
-      email: cleanEmail,
-      role: cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com' ? 'admin' : 'user'
-    },
-    session: {
-      access_token: 'auth_' + Date.now(),
-      user: { id: fallbackId, email: cleanEmail }
-    }
+    success: false,
+    error: 'Demo OTP verification is disabled. Please request a real verification code.'
   };
 }
 
