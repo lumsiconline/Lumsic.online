@@ -50,7 +50,7 @@ function resolveSupabaseUrl(url?: string, key?: string): string {
     return `https://${projectRef}.supabase.co`;
   }
 
-  return 'https://egvooldvaswcyawobucs.supabase.co';
+  return 'https://gvbvzvghwjsqisggicmu.supabase.co';
 }
 
 export const supabaseUrl = resolveSupabaseUrl(rawSupabaseUrl, rawSupabaseAnonKey);
@@ -82,7 +82,7 @@ function createSafeSupabaseClient(): SupabaseClient {
     });
   } catch (err) {
     console.warn('Supabase initialization warning:', err);
-    return createClient('https://egvooldvaswcyawobucs.supabase.co', 'placeholder-anon-key', {
+    return createClient('https://gvbvzvghwjsqisggicmu.supabase.co', 'placeholder-anon-key', {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -444,7 +444,7 @@ export async function loginWithPassword(params: {
 }
 
 /**
- * Request Password Reset OTP to registered email
+ * Request a Supabase recovery email. The Supabase Recovery email template must contain {{ .Token }} to deliver a 6-digit OTP.
  */
 export async function requestForgotPasswordOtp(email: string): Promise<{
   success: boolean; message?: string; error?: string;
