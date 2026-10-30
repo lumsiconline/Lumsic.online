@@ -90,7 +90,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
-  const [activeOtpCode, setActiveOtpCode] = useState<string>('');
 
   // Status & Feedback
   const [formError, setFormError] = useState('');
@@ -288,11 +287,8 @@ const resolvedCurrency = selectedCountry.currency;
         return;
       }
 
-      if (result.otpCode) {
-        setActiveOtpCode(result.otpCode);
-      }
       setMode('forgot_reset');
-      setStatusMessage(`A 6-digit verification code has been dispatched to ${cleanEmail}.`);
+      setStatusMessage(`If ${cleanEmail} is registered, a password reset code has been sent. Check your inbox and spam folder.`);
     } catch (err: any) {
       setIsLoading(false);
       setFormError(err?.message || 'Failed to send password reset code.');
