@@ -447,158 +447,36 @@ export async function loginWithPassword(params: {
  * Request Password Reset OTP to registered email
  */
 export async function requestForgotPasswordOtp(email: string): Promise<{
-  success: boolean;
-  message?: string;
-  otpCode?: string;
-  error?: string;
+  success: boolean; message?: string; error?: string;
 }> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(cleanEmail)) {
     return { success: false, error: 'Please enter a valid registered email address.' };
   }
-
-  // 1. Try server backend
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/forgot-password/request'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      return { success: true, message: data.message, otpCode: data.otpCode };
-    }
-    if (res.status === 404 || (data && data.error && data.error.includes('No account found'))) {
-      return { success: false, error: 'No account found with this email address.' };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend forgot-password unreachable, using local store:', backendErr);
-  }
-
-  // 2. Local fallback
-  const localAccounts = getLocalAccounts();
-  if (!localAccounts[cleanEmail]) {
-    return { success: false, error: 'No account found with this email address. Please sign up.' };
-  }
-
-  const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-  try {
-    const rawOtps = localStorage.getItem(RESET_OTP_STORAGE_KEY);
-    const otps = rawOtps ? JSON.parse(rawOtps) : {};
-    otps[cleanEmail] = {
-      code: generatedOtp,
-      expiresAt: Date.now() + 10 * 60 * 1000
-    };
-    localStorage.setItem(RESET_OTP_STORAGE_KEY, JSON.stringify(otps));
-  } catch {}
-
-  return {
-    success: true,
-    message: `Password reset code sent to ${cleanEmail}. (Code: ${generatedOtp})`,
-    otpCode: generatedOtp
-  };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, message: 'Password reset instructions have been sent if this email is registered.' };
 }
 
-/**
- * Verify Reset OTP and Set New Password
- */
 export async function resetPasswordWithOtp(params: {
-  email: string;
-  otp: string;
-  newPassword: string;
-  confirmPassword: string;
+  email: string; otp: string; newPassword: string; confirmPassword: string;
 }): Promise<{ success: boolean; message?: string; error?: string }> {
-  const cleanEmail = (params.email || '').trim().toLowerCase();
-  const cleanOtp = (params.otp || '').trim();
-  const newPass = (params.newPassword || '').trim();
-  const confirmPass = (params.confirmPassword || '').trim();
+  const email = (params.email || '').trim().toLowerCase();
+  const otp = (params.otp || '').trim();
+  const newPassword = params.newPassword || '';
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return { success: false, error: 'Please enter a valid email address.' };
+  if (!/^\\d{6}$/.test(otp)) return { success: false, error: 'Enter the 6-digit code from your reset email.' };
+  if (newPassword.length < 8) return { success: false, error: 'New password must be at least 8 characters long.' };
+  if (newPassword !== params.confirmPassword) return { success: false, error: 'Passwords do not match.' };
+  if (!isSupabaseConfigured) return { success: false, error: 'Authentication service is not configured. Please contact support.' };
 
-  if (!cleanEmail) {
-    return { success: false, error: 'Email is required.' };
-  }
-  if (!cleanOtp || cleanOtp.length < 6) {
-    return { success: false, error: 'Please enter the 6-digit reset code.' };
-  }
-  if (!newPass || newPass.length < 6) {
-    return { success: false, error: 'New password must be at least 6 characters long.' };
-  }
-  if (newPass !== confirmPass) {
-    return { success: false, error: 'Passwords do not match. Please re-enter.' };
-  }
-
-  // 1. Try server backend
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const res = await fetch(getBackendApiUrl('/api/auth/forgot-password/reset'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: cleanEmail,
-        otp: cleanOtp,
-        newPassword: newPass,
-        confirmPassword: confirmPass
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success) {
-      const localAccounts = getLocalAccounts();
-      if (localAccounts[cleanEmail]) {
-        const salt = Math.random().toString(36).substring(2, 15);
-        const hash = await hashClientPassword(newPass, salt);
-        localAccounts[cleanEmail].passwordSalt = salt;
-        localAccounts[cleanEmail].passwordHash = hash;
-        saveLocalAccounts(localAccounts);
-      }
-      return { success: true, message: data.message };
-    }
-    if (!res.ok && data && data.error) {
-      return { success: false, error: data.error };
-    }
-  } catch (backendErr: any) {
-    console.warn('Backend reset password unreachable, checking local store:', backendErr);
-  }
-
-  // 2. Local fallback
-  const isMaster = cleanOtp === '123456' || cleanOtp === '000000';
-  let isMatching = false;
-
-  try {
-    const rawOtps = localStorage.getItem(RESET_OTP_STORAGE_KEY);
-    const otps = rawOtps ? JSON.parse(rawOtps) : {};
-    const record = otps[cleanEmail];
-    if (record && record.code === cleanOtp && record.expiresAt > Date.now()) {
-      isMatching = true;
-      delete otps[cleanEmail];
-      localStorage.setItem(RESET_OTP_STORAGE_KEY, JSON.stringify(otps));
-    }
-  } catch {}
-
-  if (!isMatching && !isMaster) {
-    return { success: false, error: 'Invalid or expired verification code.' };
-  }
-
-  const localAccounts = getLocalAccounts();
-  if (localAccounts[cleanEmail]) {
-    const salt = Math.random().toString(36).substring(2, 15);
-    const hash = await hashClientPassword(newPass, salt);
-    localAccounts[cleanEmail].passwordSalt = salt;
-    localAccounts[cleanEmail].passwordHash = hash;
-    saveLocalAccounts(localAccounts);
-  }
-
-  return {
-    success: true,
-    message: 'Password reset successfully! You can now log in with your new password.'
-  };
+  const { error: verifyError } = await supabase.auth.verifyOtp({ email, token: otp, type: 'recovery' });
+  if (verifyError) return { success: false, error: verifyError.message };
+  const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+  if (updateError) return { success: false, error: updateError.message };
+  await supabase.auth.signOut();
+  return { success: true, message: 'Password reset successfully. Please log in with your new password.' };
 }
