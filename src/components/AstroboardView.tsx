@@ -160,6 +160,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     return currentAstrologer?.isOnline ? 'online' : 'offline';
   });
   const [copiedLink, setCopiedLink] = useState(false);
+  const [declineNotice, setDeclineNotice] = useState('');
 
   // Profile editing state
   const [editBio, setEditBio] = useState('');
@@ -619,6 +620,8 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
         setActiveChatSession(null);
       }
       setSessions(prev => prev.filter(s => s.id !== sessionId));
+      setDeclineNotice('Chat declined successfully');
+      window.setTimeout(() => setDeclineNotice(''), 3000);
       broadcastSessionEvent('session_declined', { id: sessionId });
 
       await fetch(`/api/sessions/${sessionId}/decline`, {
@@ -1008,6 +1011,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1E293B] font-sans flex flex-col antialiased">
+      {declineNotice && (
+        <div role="status" aria-live="polite" className="fixed top-20 right-4 z-[60] rounded-xl bg-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
+          {declineNotice}
+        </div>
+      )}
       
       {/* ========================================================================= */}
       {/* 4. TOP HEADER BAR */}
