@@ -4517,8 +4517,6 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
 
   const effectiveReaderId = requestedReaderId || (db.readers[0] ? db.readers[0].id : 'psychic-tamara');
   const requestedReader = db.readers.find(r => r.id === effectiveReaderId || r.astroId === effectiveReaderId) || db.readers[0];
-  const psychicTamara = db.readers.find(r => r.id === 'psychic-tamara' || r.astroId === 'LYS-10001') || db.readers[0];
-
   // Check or register customer
   const effectiveCustomerId = customerId || ('cust_' + Date.now());
   let cust = db.customers[effectiveCustomerId];
@@ -5518,7 +5516,7 @@ app.get('/api/astroboard/stats', (_req: Request, res: Response) => {
 app.get('/api/astroboard/sessions', (req: Request, res: Response) => {
   updateStats();
   const readerId = (req.query.readerId as string || '').trim();
-  const showAll = req.query.all === 'true' || req.query.showAll === 'true' || req.query.isAdmin === 'true' || !readerId || readerId === 'psychic-tamara';
+  const showAll = req.query.all === 'true' || req.query.showAll === 'true' || req.query.isAdmin === 'true' || !readerId;
 
   let list = Object.values(db.sessions).sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
