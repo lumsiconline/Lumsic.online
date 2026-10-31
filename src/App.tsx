@@ -670,6 +670,10 @@ export default function App() {
         throw new Error(data?.error || 'The server did not create a chat session. Please try again.');
       }
 
+      // Keep the private session credential with the active chat only.
+      if (data.session.sessionToken) {
+        try { sessionStorage.setItem(`lumsic_session_token_${data.session.id}`, data.session.sessionToken); } catch {}
+      }
       setActiveSession(data.session);
       setIsChatOpen(true);
     } catch (err: any) {
@@ -690,7 +694,10 @@ export default function App() {
       // Send the customer's message to the human astrologer dashboard (no AI/chatbot).
       const res = await fetch(`/api/sessions/${sessionId}/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionStorage.getItem(`lumsic_session_token_${sessionId}`) ? { 'x-session-token': sessionStorage.getItem(`lumsic_session_token_${sessionId}`) as string } : {})
+        },
         body: JSON.stringify({
           sender: 'customer',
           senderName: activeSession.customerName,
