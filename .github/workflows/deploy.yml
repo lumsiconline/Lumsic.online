@@ -37,6 +37,9 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          # URL of the running backend (server.ts), e.g. https://your-backend.example.com
+          # Set it in GitHub: Settings > Secrets and variables > Actions > Variables.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           # Supabase project URL and publishable key are public client configuration.
           # Keep Actions secrets as overrides, with safe project-specific defaults so
           # an unset repository secret cannot silently disable all authentication.
