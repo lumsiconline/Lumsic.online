@@ -34,6 +34,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'data', 'astral_sage_db.json');
+const DB_TMP_FILE = DB_FILE + '.tmp';
+// DB persistence state (declared up-front: saveDB() is first called while the DB loads)
+let dbSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let dbSaveInFlight = false;
+let dbSavePending = false;
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 
 // Ensure data and uploads folders exist
@@ -2055,12 +2060,56 @@ try {
   console.error('Error loading DB file:', err);
 }
 
+// Persist the in-memory DB without blocking requests.
+// The old version did a synchronous, pretty-printed write of the WHOLE database on every call
+// (and every second while any chat was active), which froze the event loop and made
+// /api/sessions/create time out with a 504 behind the proxy. The in-memory `db` is the
+// source of truth, so writes are coalesced (max one per 400ms), compact, async and atomic.
 function saveDB() {
+  dbSavePending = true;
+  if (dbSaveTimer || dbSaveInFlight) return;
+  dbSaveTimer = setTimeout(() => {
+    dbSaveTimer = null;
+    void flushDBAsync();
+  }, 400);
+}
+
+async function flushDBAsync() {
+  if (dbSaveInFlight || !dbSavePending) return;
+  dbSaveInFlight = true;
+  dbSavePending = false;
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    await fs.promises.writeFile(DB_TMP_FILE, JSON.stringify(db), 'utf-8');
+    await fs.promises.rename(DB_TMP_FILE, DB_FILE); // atomic: never leaves a half-written DB
   } catch (err) {
+    dbSavePending = true;
     console.error('Error saving DB file:', err);
+  } finally {
+    dbSaveInFlight = false;
+    if (dbSavePending && !dbSaveTimer) saveDB();
   }
+}
+
+function flushDBSync() {
+  if (dbSaveTimer) {
+    clearTimeout(dbSaveTimer);
+    dbSaveTimer = null;
+  }
+  if (!dbSavePending) return;
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db), 'utf-8');
+    dbSavePending = false;
+  } catch (err) {
+    console.error('Error flushing DB file on shutdown:', err);
+  }
+}
+
+// Cloud hosts send SIGTERM on restart/scale-down: persist anything still pending.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    flushDBSync();
+    process.exit(0);
+  });
 }
 
 // Recalculate stats
@@ -4107,9 +4156,17 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     readingType, 
     topic, 
     initialQuestion, 
-    birthDetails, 
-    requestedReaderId 
-  } = req.body;
+    birthDetails,
+    requestedReaderId,
+    clientRequestId
+  } = req.body || {};
+
+  // Idempotency: if the browser retries after a gateway timeout, return the chat that was
+  // already created instead of creating a duplicate request for the astrologer.
+  if (typeof clientRequestId === 'string' && clientRequestId) {
+    const existing = Object.values(db.sessions).find((s: any) => s.clientRequestId === clientRequestId);
+    if (existing) return res.json({ session: existing });
+  }
 
   const effectiveReaderId = requestedReaderId || (db.readers[0] ? db.readers[0].id : 'psychic-tamara');
   const requestedReader = db.readers.find(r => r.id === effectiveReaderId || r.astroId === effectiveReaderId) || db.readers[0];
@@ -4205,7 +4262,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     ratePerMinute: requestedReader.ratePerMinute || 1.0,
     createdAt: new Date().toISOString(),
     messages: initialMessages,
-    paymentStatus: isEligibleForFree ? 'free_tier' : 'paid_active'
+    paymentStatus: isEligibleForFree ? 'free_tier' : 'paid_active',
+    clientRequestId: typeof clientRequestId === 'string' && clientRequestId ? clientRequestId : undefined
   } as any;
 
   db.sessions[sessionId] = session;
@@ -4213,10 +4271,14 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
   updateStats();
   saveDB();
 
-  // Notify Astroboard in real-time
-  broadcast('new_session', session);
-
+  // Reply first so the customer lands in the chat immediately, then notify the Astroboard.
   res.json({ session });
+
+  try {
+    broadcast('new_session', session);
+  } catch (err) {
+    console.error('new_session broadcast failed:', err);
+  }
 });
 
 // API: Get session by ID (Protected by Session Privacy & Participant Verification)
