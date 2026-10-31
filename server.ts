@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 import { READERS } from './src/data/readers';
 import { ZODIAC_SIGNS } from './src/data/horoscope';
 import { SACRED_RITUALS_AND_SPELLS } from './src/data/spells';
@@ -33,6 +34,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_SERVER_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
+const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVER_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    })
+  : null;
 const DB_FILE = path.join(__dirname, 'data', 'astral_sage_db.json');
 const DB_TMP_FILE = DB_FILE + '.tmp';
 // DB persistence state (declared up-front: saveDB() is first called while the DB loads)
@@ -2054,7 +2062,7 @@ try {
       db.stats = { ...db.stats, ...parsed.stats };
     }
   }
-  saveDB();
+  if (!supabaseAdmin) saveDB();
 } catch (err) {
   console.error('Error loading DB file:', err);
 }
@@ -2064,13 +2072,83 @@ try {
 // (and every second while any chat was active), which froze the event loop and made
 // /api/sessions/create time out with a 504 behind the proxy. The in-memory `db` is the
 // source of truth, so writes are coalesced (max one per 400ms), compact, async and atomic.
+let supabaseSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let supabaseSaveQueue: Promise<void> = Promise.resolve();
+let supabaseSavePending = false;
+
 function saveDB() {
+  if (supabaseAdmin) {
+    supabaseSavePending = true;
+    if (supabaseSaveTimer) return;
+    supabaseSaveTimer = setTimeout(() => {
+      supabaseSaveTimer = null;
+      void flushSupabaseState();
+    }, 400);
+    return;
+  }
+
   dbSavePending = true;
   if (dbSaveTimer || dbSaveInFlight) return;
   dbSaveTimer = setTimeout(() => {
     dbSaveTimer = null;
     void flushDBAsync();
   }, 400);
+}
+
+async function flushSupabaseState() {
+  if (!supabaseAdmin || !supabaseSavePending) return;
+  supabaseSavePending = false;
+  const snapshot = JSON.parse(JSON.stringify(db));
+  supabaseSaveQueue = supabaseSaveQueue.then(async () => {
+    const { error } = await supabaseAdmin!
+      .from('app_state')
+      .upsert({ id: 'primary', state: snapshot, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    if (error) throw error;
+  }).catch((error) => {
+    supabaseSavePending = true;
+    console.error('Error saving application state to Supabase:', error);
+  });
+
+  await supabaseSaveQueue;
+  if (supabaseSavePending && !supabaseSaveTimer) {
+    supabaseSaveTimer = setTimeout(() => {
+      supabaseSaveTimer = null;
+      void flushSupabaseState();
+    }, 2000);
+  }
+}
+
+async function initializeSupabaseState() {
+  if (!SUPABASE_URL && !SUPABASE_SERVER_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Supabase persistence is required in production. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY).');
+    }
+    console.warn('Supabase credentials not configured; using local JSON storage for development.');
+    return;
+  }
+  if (!supabaseAdmin) {
+    throw new Error('Supabase persistence configuration is incomplete. Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY).');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('app_state')
+    .select('state')
+    .eq('id', 'primary')
+    .maybeSingle();
+
+  if (error) throw new Error(`Unable to load application state from Supabase: ${error.message}`);
+
+  if (data?.state && typeof data.state === 'object') {
+    db = { ...db, ...data.state } as DBState;
+    console.log('Loaded persistent Lumsic application state from Supabase.');
+    return;
+  }
+
+  const { error: seedError } = await supabaseAdmin
+    .from('app_state')
+    .insert({ id: 'primary', state: db, updated_at: new Date().toISOString() });
+  if (seedError) throw new Error(`Unable to initialize Supabase application state: ${seedError.message}`);
+  console.log('Initialized persistent Lumsic application state in Supabase.');
 }
 
 async function flushDBAsync() {
@@ -2106,6 +2184,20 @@ function flushDBSync() {
 // Cloud hosts send SIGTERM on restart/scale-down: persist anything still pending.
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
+    if (supabaseSaveTimer) {
+      clearTimeout(supabaseSaveTimer);
+      supabaseSaveTimer = null;
+    }
+    if (supabaseAdmin) {
+      const forceExit = setTimeout(() => process.exit(1), 9000);
+      forceExit.unref();
+      void (async () => {
+        if (supabaseSavePending) await flushSupabaseState();
+        await supabaseSaveQueue;
+        process.exit(0);
+      })();
+      return;
+    }
     flushDBSync();
     process.exit(0);
   });
@@ -6385,7 +6477,9 @@ async function setupApp() {
   });
 }
 
-setupApp().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+initializeSupabaseState()
+  .then(() => setupApp())
+  .catch(err => {
+    console.error('Failed to initialize persistent storage or start server:', err);
+    process.exit(1);
+  });
