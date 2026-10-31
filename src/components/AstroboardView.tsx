@@ -74,6 +74,7 @@ interface AstroboardViewProps {
   onBackToSite: () => void;
   onOpenAdmin?: () => void;
   readers?: Reader[];
+  authenticatedReader?: Reader | null;
   onToggleReaderOnline?: (readerId: string, isOnline: boolean) => void;
 }
 
@@ -110,6 +111,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   onBackToSite,
   onOpenAdmin,
   readers: initialReaders,
+  authenticatedReader,
   onToggleReaderOnline
 }) => {
   // Readers List - default to READERS (Psychic Tamara & all 48 astrologers)
@@ -119,6 +121,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
 
   // Currently authenticated Astrologer - defaults to Psychic Tamara (LYS-10001)
   const [currentAstrologer, setCurrentAstrologer] = useState<Reader | null>(() => {
+    if (authenticatedReader) return authenticatedReader;
     try {
       const saved = localStorage.getItem('astrodashboard_logged_in_astro');
       if (saved) {
@@ -130,6 +133,16 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     }
     return (initialReaders && initialReaders.length > 0 ? initialReaders[0] : null) || READERS[0];
   });
+
+  // The central inbox is owned only by Psychic Tamara (LYS-10001).
+  // All customer consultations are assigned to this account.
+  const isCentralInbox = currentAstrologer?.id === 'psychic-tamara' || currentAstrologer?.astroId === 'LYS-10001';
+
+  useEffect(() => {
+    if (!authenticatedReader) return;
+    setCurrentAstrologer(authenticatedReader);
+    localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(authenticatedReader));
+  }, [authenticatedReader?.id]);
 
   // Active navigation section
   const [activeNav, setActiveNav] = useState<SidebarSection>('dashboard');
@@ -282,7 +295,8 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       let serverSessions: ConsultationSession[] = [];
       try {
         const astroToken = localStorage.getItem('astrodashboard_token') || '';
-        const url = '/api/astroboard/sessions?all=true';
+        const readerId = isCentralInbox ? 'psychic-tamara' : (currentAstrologer?.id || 'unassigned');
+        const url = `/api/astroboard/sessions?readerId=${encodeURIComponent(readerId)}`;
         const res = await fetch(url, {
           headers: {
             ...(astroToken ? { 'x-astrologer-token': astroToken, 'Authorization': `Bearer ${astroToken}` } : {}),
@@ -300,7 +314,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       }
 
       // Combine server sessions with stored sessions for 100% resilience across static/CDN and live hosting
-      const localSessions = getStoredSessions();
+      const localSessions = isCentralInbox ? getStoredSessions() : [];
       const sessionMap = new Map<string, ConsultationSession>();
       localSessions.forEach(s => sessionMap.set(s.id, s));
       serverSessions.forEach(s => {
@@ -320,7 +334,14 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
         }
       });
 
-      const combinedSessions = Array.from(sessionMap.values()).sort((a, b) => {
+      const combinedSessions = Array.from(sessionMap.values())
+        .filter(session => isCentralInbox && (
+          session.assignedReaderId === 'psychic-tamara' ||
+          session.assignedAstroId === 'LYS-10001' ||
+          session.requestedReaderId === 'psychic-tamara' ||
+          session.requestedAstroId === 'LYS-10001'
+        ))
+        .sort((a, b) => {
         const tA = new Date(a.createdAt || a.startTime || 0).getTime();
         const tB = new Date(b.createdAt || b.startTime || 0).getTime();
         return tB - tA;
@@ -380,6 +401,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       if (!type || !data) return;
 
       if (type === 'new_session' && data.id) {
+        if (!isCentralInbox) return;
         setSessions(prev => [data, ...prev.filter(s => s.id !== data.id)]);
         if (!dismissedSessionIdsRef.current.has(data.id) && activeChatSession?.id !== data.id) {
           seenSessionIdsRef.current.add(data.id);
@@ -426,7 +448,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       es.addEventListener('new_session', (e: MessageEvent) => {
         try {
           const session = JSON.parse(e.data);
-          if (session && session.id) {
+          if (session && session.id && isCentralInbox) {
             setSessions(prev => [session, ...prev.filter(s => s.id !== session.id)]);
             if (!dismissedSessionIdsRef.current.has(session.id) && activeChatSession?.id !== session.id) {
               setIncomingAlertSession(session);
@@ -476,7 +498,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       window.removeEventListener('lumsic_session_event', onCustomEvent);
       if (es) es.close();
     };
-  }, [activeChatSession?.id]);
+  }, [activeChatSession?.id, currentAstrologer?.id, authenticatedReader?.id]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
