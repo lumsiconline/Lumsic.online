@@ -271,7 +271,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
         }
       }
     } catch (err) {
-      console.error('Failed to load readers:', err);
+      console.warn('Astroboard readers fetch notice (operating with cached/fallback readers):', err);
     }
   };
 

@@ -45,7 +45,7 @@ export const AstralStoreWhiteView: React.FC<AstralStoreWhiteViewProps> = ({
           setProducts(data.products);
         }
       })
-      .catch(err => console.error('Failed to load store products:', err));
+      .catch(err => console.warn('Store products fetch notice (operating with local fallback):', err));
 
     const es = new EventSource('/api/events');
     es.addEventListener('shop_product_created', (e) => {

@@ -141,7 +141,6 @@ export const Header: React.FC<HeaderProps> = ({
       if (e.key === 'Escape') {
         setDesktopSearchOpen(false);
         setMobileSearchOpen(false);
-        setCurDropdownOpen(false);
         setLangDropdownOpen(false);
       }
     };
@@ -162,9 +161,6 @@ export const Header: React.FC<HeaderProps> = ({
       const target = e.target as HTMLElement;
       if (!target.closest('[data-search-box]')) {
         setDesktopSearchOpen(false);
-      }
-      if (!target.closest('[data-currency-box]')) {
-        setCurDropdownOpen(false);
       }
       if (!target.closest('[data-lang-box]')) {
         setLangDropdownOpen(false);

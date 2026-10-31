@@ -165,7 +165,10 @@ export async function initiateRazorpayCheckout(options: InitiateCheckoutOptions)
       notes: options.notes
     });
 
-    const keyId = order.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_TtnEYNftIawfUS';
+    const keyId = order.key_id || (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || '';
+    if (!keyId) {
+      throw new Error('Razorpay is not configured on this server.');
+    }
 
     // 2. Configure Razorpay modal options
     const rzpOptions = {

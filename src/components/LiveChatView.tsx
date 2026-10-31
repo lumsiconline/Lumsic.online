@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConsultationSession, ChatMessage, Reader } from '../types';
 import { 
+  getStoredSessions, 
+  SESSIONS_CHANNEL_NAME 
+} from '../utils/sessionSync';
+import { 
   Send, 
   X, 
   ArrowLeft, 
@@ -82,31 +86,104 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     }, ...prev]);
   }, [session.id]);
 
-  // Real-time synchronization: Poll for new astrologer/operator messages
+  // Real-time synchronization: BroadcastChannel + local storage + server poll
   useEffect(() => {
     if (!session?.id || isEnded) return;
 
+    // 1. Cross-tab instant 0ms broadcast listener
+    let bc: BroadcastChannel | null = null;
+    const handleIncomingEvent = (event: any) => {
+      try {
+        const { type, payload, data } = event.data || event.detail || {};
+        const msg = payload || data;
+        if (type === 'message_received' && msg) {
+          if (msg.sessionId === session.id) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
+            if (msg.sender === 'astrologer' && !msg.isAiMessage) {
+              setHumanReplyStarted(true);
+            }
+          }
+        } else if (type === 'session_ended' && msg) {
+          if (msg.id === session.id) {
+            setIsEnded(true);
+            setShowCashbackPopup(true);
+          }
+        }
+      } catch (err) {
+        console.warn('LiveChat Broadcast event notice:', err);
+      }
+    };
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
+        bc.onmessage = handleIncomingEvent;
+      }
+    } catch {}
+
+    const onCustomEvent = (e: Event) => handleIncomingEvent(e as CustomEvent);
+    window.addEventListener('lumsic_session_event', onCustomEvent);
+
+    // 2. High-resilience poll checking both local storage and server
     const pollInterval = setInterval(async () => {
+      // Local storage check (0ms cross-tab persistence)
+      try {
+        const stored = getStoredSessions();
+        const currentStored = stored.find(s => s.id === session.id);
+        if (currentStored && Array.isArray(currentStored.messages)) {
+          setMessages(prev => {
+            if (currentStored.messages.length > prev.length) {
+              return currentStored.messages;
+            }
+            return prev;
+          });
+          if ((currentStored.messages || []).some(m => m.sender === 'astrologer' && !m.isAiMessage)) {
+            setHumanReplyStarted(true);
+          }
+          if (currentStored.status === 'completed' && !isEnded) {
+            setIsEnded(true);
+            setShowCashbackPopup(true);
+          }
+        }
+      } catch {}
+
+      // Server poll
       try {
         const sessionToken = sessionStorage.getItem(`lumsic_session_token_${session.id}`);
         const res = await fetch(`/api/sessions/${session.id}`, {
           headers: sessionToken ? { 'x-session-token': sessionToken } : {}
         });
-        const data = await res.json();
-        if (data.session && Array.isArray(data.session.messages)) {
-          setMessages(prev => {
-            if (data.session.messages.length > prev.length) {
-              return data.session.messages;
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data && data.session && Array.isArray(data.session.messages)) {
+            setMessages(prev => {
+              if (data.session.messages.length > prev.length) {
+                return data.session.messages;
+              }
+              return prev;
+            });
+            if ((data.session.messages || []).some((m: any) => m.sender === 'astrologer' && !m.isAiMessage)) {
+              setHumanReplyStarted(true);
             }
-            return prev;
-          });
+            if (data.session.status === 'completed' && !isEnded) {
+              setIsEnded(true);
+              setShowCashbackPopup(true);
+            }
+          }
         }
       } catch {
         // network resilience
       }
     }, 2000);
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      clearInterval(pollInterval);
+      if (bc) bc.close();
+      window.removeEventListener('lumsic_session_event', onCustomEvent);
+    };
   }, [session?.id, isEnded]);
 
   // Live Timer Countdown: runs every second

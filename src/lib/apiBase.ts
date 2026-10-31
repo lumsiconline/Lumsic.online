@@ -22,26 +22,68 @@ function install() {
   if (w.__lumsicApiBaseInstalled) return;
   w.__lumsicApiBaseInstalled = true;
 
-  const nativeFetch = window.fetch.bind(window);
-  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    if (typeof input === 'string') return nativeFetch(withApiBase(input), init);
-    if (input instanceof URL && input.origin === window.location.origin) {
-      return nativeFetch(withApiBase(input.pathname + input.search), init);
-    }
-    return nativeFetch(input, init);
-  }) as typeof window.fetch;
+  try {
+    const rawFetch = window.fetch || (globalThis as any).fetch;
+    if (rawFetch) {
+      const nativeFetch = rawFetch.bind(globalThis);
+      const customFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        if (typeof input === 'string') return nativeFetch(withApiBase(input), init);
+        if (input instanceof URL && input.origin === window.location.origin) {
+          return nativeFetch(withApiBase(input.pathname + input.search), init);
+        }
+        return nativeFetch(input, init);
+      }) as typeof window.fetch;
 
-  const NativeEventSource = window.EventSource;
-  if (NativeEventSource) {
-    const PatchedEventSource = function (this: any, url: string | URL, config?: EventSourceInit) {
-      return new NativeEventSource(typeof url === 'string' ? withApiBase(url) : url, config);
-    } as unknown as typeof EventSource;
-    PatchedEventSource.prototype = NativeEventSource.prototype;
-    (PatchedEventSource as any).CONNECTING = NativeEventSource.CONNECTING;
-    (PatchedEventSource as any).OPEN = NativeEventSource.OPEN;
-    (PatchedEventSource as any).CLOSED = NativeEventSource.CLOSED;
-    window.EventSource = PatchedEventSource;
+      try {
+        Object.defineProperty(window, 'fetch', {
+          value: customFetch,
+          writable: true,
+          configurable: true
+        });
+      } catch {
+        try {
+          (window as any).fetch = customFetch;
+        } catch (err) {
+          console.warn('Could not override window.fetch:', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('apiBase fetch patch notice:', err);
+  }
+
+  try {
+    const NativeEventSource = window.EventSource;
+    if (NativeEventSource) {
+      const PatchedEventSource = function (this: any, url: string | URL, config?: EventSourceInit) {
+        return new NativeEventSource(typeof url === 'string' ? withApiBase(url) : url, config);
+      } as unknown as typeof EventSource;
+      PatchedEventSource.prototype = NativeEventSource.prototype;
+      (PatchedEventSource as any).CONNECTING = NativeEventSource.CONNECTING;
+      (PatchedEventSource as any).OPEN = NativeEventSource.OPEN;
+      (PatchedEventSource as any).CLOSED = NativeEventSource.CLOSED;
+
+      try {
+        Object.defineProperty(window, 'EventSource', {
+          value: PatchedEventSource,
+          writable: true,
+          configurable: true
+        });
+      } catch {
+        try {
+          (window as any).EventSource = PatchedEventSource;
+        } catch (err) {
+          console.warn('Could not override window.EventSource:', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('apiBase EventSource patch notice:', err);
   }
 }
 
-install();
+try {
+  install();
+} catch (err) {
+  console.warn('apiBase install notice:', err);
+}

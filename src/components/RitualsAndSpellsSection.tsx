@@ -56,7 +56,7 @@ export const RitualsAndSpellsSection: React.FC<RitualsAndSpellsSectionProps> = (
           setLiveSpells(data.spells);
         }
       })
-      .catch(err => console.error('Failed to load spells from API:', err));
+      .catch(err => console.warn('Spells fetch notice (operating with local fallback):', err));
 
     // 2. Fetch Shop Products
     fetch('/api/shop-products')
@@ -66,7 +66,7 @@ export const RitualsAndSpellsSection: React.FC<RitualsAndSpellsSectionProps> = (
           setLiveProducts(data.products);
         }
       })
-      .catch(err => console.error('Failed to load shop products from API:', err));
+      .catch(err => console.warn('Shop products fetch notice (operating with local fallback):', err));
 
     // 3. Real-time updates via SSE
     const es = new EventSource('/api/events');

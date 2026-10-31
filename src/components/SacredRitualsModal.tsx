@@ -44,7 +44,7 @@ export const SacredRitualsModal: React.FC<SacredRitualsModalProps> = ({
           setSpells(data.spells);
         }
       })
-      .catch(err => console.error('Failed to load spells:', err));
+      .catch(err => console.warn('Spells fetch notice (operating with local fallback):', err));
 
     // Fetch shop
     fetch('/api/shop-products')
@@ -54,7 +54,7 @@ export const SacredRitualsModal: React.FC<SacredRitualsModalProps> = ({
           setShopProducts(data.products);
         }
       })
-      .catch(err => console.error('Failed to load shop products:', err));
+      .catch(err => console.warn('Shop products fetch notice (operating with local fallback):', err));
   }, [isOpen]);
 
   useEffect(() => {
