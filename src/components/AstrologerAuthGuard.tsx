@@ -16,15 +16,8 @@ import {
   ArrowLeft,
   UserCheck
 } from 'lucide-react';
-import { 
-  auth, 
-  subscribeToAuthRole, 
-  signInWithGoogle, 
-  signInEmailPassword, 
-  signOutCurrentUser,
-  AuthUserProfile,
-  SUPER_ADMIN_EMAIL 
-} from '../lib/firebase';
+import { supabase } from '../lib/supabase';
+import type { AuthUserProfile } from '../lib/firebase';
 import { Reader } from '../types';
 
 interface AstrologerAuthGuardProps {
@@ -44,11 +37,29 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
   const [availableReaders, setAvailableReaders] = useState<Reader[]>([]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthRole((userProfile, isLoading) => {
-      setProfile(userProfile);
-      setLoading(isLoading);
-    });
-    return () => unsubscribe();
+    let alive = true;
+    const loadProfile = async (user: any) => {
+      if (!user) { if (alive) { setProfile(null); setMatchedReader(null); setLoading(false); } return; }
+      const { data: roleRow, error } = await supabase
+        .from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
+      if (!alive) return;
+      if (error || !roleRow || !['astrologer','admin','super_admin'].includes(roleRow.role)) {
+        setProfile(null);
+        setErrorMsg('This Supabase account is not assigned an astrologer/admin role. Ask the administrator to assign access.');
+        setLoading(false);
+        return;
+      }
+      const p: AuthUserProfile = {
+        uid: user.id, email: user.email || '', displayName: user.user_metadata?.full_name || user.email || 'Astrologer',
+        role: roleRow.role, isAdmin: ['admin','super_admin'].includes(roleRow.role),
+        isAstrologer: roleRow.role === 'astrologer' || ['admin','super_admin'].includes(roleRow.role)
+      };
+      setProfile(p);
+      setLoading(false);
+    };
+    supabase.auth.getSession().then(({ data }) => loadProfile(data.session?.user || null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { void loadProfile(session?.user || null); });
+    return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
 
   // Fetch readers and match authenticated astrologer
@@ -85,92 +96,40 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
   };
 
   const handleGoogleSignIn = async () => {
-    try {
-      setErrorMsg(null);
-      setSubmitting(true);
-      await signInWithGoogle();
-    } catch (err: any) {
-      console.error('Google sign in error:', err);
-      setErrorMsg(err.message || 'Failed to authenticate with Google');
-    } finally {
-      setSubmitting(false);
-    }
+    setErrorMsg('Use your approved Supabase staff email and password to sign in.');
   };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setErrorMsg('Please enter email and password');
-      return;
-    }
+    if (!email || !password) { setErrorMsg('Enter your Supabase staff email and password.'); return; }
     try {
-      setErrorMsg(null);
-      setSubmitting(true);
-      await signInEmailPassword(email, password);
-    } catch (err: any) {
-      console.error('Email sign in error:', err);
-      // Quick fallback if password matches reader demo access
-      const matched = availableReaders.find(r => 
-        (r as any).email?.toLowerCase() === email.toLowerCase().trim() ||
-        r.id.toLowerCase() === email.toLowerCase().trim() ||
-        (r.astroId && r.astroId.toLowerCase() === email.toLowerCase().trim())
-      );
-      if (matched && (password === '123456' || password === 'astrologer' || password === 'admin123')) {
-        setProfile({
-          uid: 'astro_' + matched.id,
-          email: (matched as any).email || `${matched.id}@astrodashboard.com`,
-          displayName: matched.name,
-          role: 'astrologer',
-          isAdmin: false,
-          isAstrologer: true
-        });
-        setMatchedReader(matched);
-        return;
+      setErrorMsg(null); setSubmitting(true);
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) throw error;
+      const user = data.user;
+      if (!user) throw new Error('Supabase did not return a user.');
+      const { data: roleRow, error: roleError } = await supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
+      if (roleError || !roleRow || !['astrologer','admin','super_admin'].includes(roleRow.role)) {
+        await supabase.auth.signOut();
+        throw new Error('This account has no approved astrologer/admin role in Supabase.');
       }
-      setErrorMsg(err.message || 'Invalid astrologer credentials');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Quick One-Click Login for Reader
-  const handleQuickReaderLogin = (reader: Reader) => {
-    const readerEmail = (reader as any).email || `${reader.id}@astrodashboard.com`;
-    setProfile({
-      uid: 'astro_' + reader.id,
-      email: readerEmail,
-      displayName: reader.name,
-      role: 'astrologer',
-      isAdmin: false,
-      isAstrologer: true
-    });
-    setMatchedReader(reader);
-  };
-
-  // Super Login for bankush014@gmail.com (Requested by Platform Owner)
-  const handleSuperLoginBankush = () => {
-    const defaultReader = availableReaders[0] || {
-      id: 'psychic-tamara',
-      astroId: 'LYS-10001',
-      name: 'Psychic Tamara',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-      title: 'Clairvoyant & Love Advisor'
-    };
-    setProfile({
-      uid: 'super_bankush_owner',
-      email: 'bankush014@gmail.com',
-      displayName: 'Bankush (Super Admin & Astrologer)',
-      role: 'admin',
-      isAdmin: true,
-      isAstrologer: true
-    });
-    setMatchedReader(defaultReader as any);
+      const readersResult = await supabase.from('readers').select('id,name,email,astro_id,public_data').ilike('email', user.email || '');
+      const row = readersResult.data?.[0];
+      if (row) {
+        const publicData = row.public_data || {};
+        setMatchedReader({ ...publicData, id: row.id, name: row.name, email: row.email, astroId: row.astro_id } as Reader);
+      } else if (roleRow.role === 'astrologer') {
+        await supabase.auth.signOut();
+        throw new Error('No reader profile is linked to this email in Supabase.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Supabase sign-in failed.');
+    } finally { setSubmitting(false); }
   };
 
   const handleSignOut = async () => {
-    await signOutCurrentUser();
-    setProfile(null);
-    setMatchedReader(null);
+    await supabase.auth.signOut();
+    setProfile(null); setMatchedReader(null);
   };
 
   // Loading state
@@ -235,35 +194,6 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
             </div>
           )}
 
-          {/* Super Login for bankush014@gmail.com */}
-          <button
-            type="button"
-            onClick={handleSuperLoginBankush}
-            className="w-full mb-3 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:brightness-110 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] border border-amber-300"
-          >
-            <Sparkles className="w-4 h-4 text-slate-950 animate-spin" />
-            <span>⚡ Super Login: bankush014@gmail.com</span>
-          </button>
-
-          {/* Google Sign-in */}
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            disabled={submitting}
-            className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.98] disabled:opacity-50"
-          >
-            {submitting ? (
-              <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
-            ) : (
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-            )}
-            <span>Sign In with Astrologer Google Account</span>
-          </button>
 
           <div className="flex items-center my-4">
             <div className="flex-1 border-t border-white/10" />
@@ -317,34 +247,6 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
             </button>
           </form>
 
-          {/* Quick Reader 1-Click Launchers */}
-          {availableReaders.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-white/10">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-amber-400/80 mb-2 text-center">
-                Instant Duty Workstation Access:
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {availableReaders.slice(0, 4).map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => handleQuickReaderLogin(r)}
-                    className="p-2 rounded-xl bg-slate-900/80 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/40 text-left transition flex items-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <img
-                      src={r.avatar}
-                      alt={r.name}
-                      className="w-7 h-7 rounded-full object-cover shrink-0 border border-amber-400/30"
-                    />
-                    <div className="truncate">
-                      <div className="text-white text-xs font-bold truncate">{r.name.split(' ')[0]}</div>
-                      <div className="text-[10px] text-amber-300/70 font-mono truncate">{r.astroId || r.id}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Footer Back to Site */}
           <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px]">
