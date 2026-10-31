@@ -317,7 +317,8 @@ function verifyAstrologer(req: Request, readerId?: string): boolean {
 
   const authHeader = (req.headers['authorization'] as string || '').trim();
   const token = (req.headers['x-astrologer-token'] as string || '').trim() ||
-                (authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '');
+                (authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '') ||
+                (req.query.token as string || '').trim();
 
   if (token) {
     const session = ASTROLOGER_SESSIONS.get(token);
@@ -2239,14 +2240,26 @@ function updateStats() {
 type SSEClient = {
   id: string;
   res: Response;
+  readerId: string;
+  isAdmin: boolean;
 };
 
 let sseClients: SSEClient[] = [];
 
 function broadcast(eventType: string, data: any) {
-  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  const payload = `event: ${eventType}\\ndata: ${JSON.stringify(data)}\\n\\n`;
   sseClients.forEach(client => {
     try {
+      if (!client.isAdmin && client.readerId !== 'psychic-tamara' && client.readerId !== 'LYS-10001') {
+        const sessionId = data?.sessionId || data?.session?.id || (data?.id && db.sessions[data.id] ? data.id : '');
+        const session = sessionId ? db.sessions[sessionId] : data?.session;
+        if (!session) return;
+        const ownsSession = [
+          session.assignedReaderId, session.requestedReaderId,
+          session.assignedAstroId, session.requestedAstroId
+        ].some(id => id && id === client.readerId);
+        if (!ownsSession) return;
+      }
       client.res.write(payload);
     } catch {
       // client dropped
@@ -2322,19 +2335,24 @@ setInterval(() => {
   }
 }, 1000);
 
-// API: SSE Stream
+// API: Authenticated, reader-scoped SSE stream for workstation updates.
 app.get('/api/events', (req: Request, res: Response) => {
+  const readerId = (req.query.readerId as string || '').trim();
+  const isAdmin = verifyAdmin(req);
+  if (!readerId || (!isAdmin && !verifyAstrologer(req, readerId))) {
+    return res.status(401).json({ error: 'Authenticated astrologer workstation access is required for live events.' });
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
   const clientId = 'client_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-  const newClient: SSEClient = { id: clientId, res };
+  const newClient: SSEClient = { id: clientId, res, readerId, isAdmin };
   sseClients.push(newClient);
 
-  // Send initial ping
-  res.write(`event: connected\ndata: ${JSON.stringify({ clientId })}\n\n`);
+  res.write(`event: connected\\ndata: ${JSON.stringify({ clientId })}\\n\\n`);
 
   req.on('close', () => {
     sseClients = sseClients.filter(c => c.id !== clientId);
