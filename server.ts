@@ -337,30 +337,21 @@ function verifyAstrologer(req: Request, readerId?: string): boolean {
 // 8. Session Privacy Access Control
 function verifySessionAccess(req: Request, session: ConsultationSession): boolean {
   if (!session) return false;
-  // Always permit legitimate customer and astrologer consultation messaging
-  const sender = (req.body?.sender || req.query?.sender || '').trim();
-  if (sender === 'customer' || sender === 'astrologer') {
-    return true;
-  }
-
   if (verifyAdmin(req)) return true;
 
-  const providedToken = (req.headers['x-session-token'] as string || req.query.token as string || req.body?.sessionToken as string || '').trim();
-  if (providedToken && (session as any).sessionToken && providedToken === (session as any).sessionToken) {
-    return true;
-  }
+  const providedToken = (
+    (req.headers['x-session-token'] as string) ||
+    (req.query.token as string) ||
+    (req.body?.sessionToken as string) ||
+    ''
+  ).trim();
+  const storedToken = (session as any).sessionToken;
+  if (providedToken && storedToken && providedToken === storedToken) return true;
 
-  const customerId = (req.headers['x-customer-id'] as string || req.body?.customerId as string || req.query.customerId as string || '').trim();
-  if (customerId && customerId === session.customerId) {
-    return true;
-  }
+  // Astrologers must present their authenticated workstation token.
+  if (verifyAstrologer(req, session.assignedReaderId || session.requestedReaderId)) return true;
 
-  if (verifyAstrologer(req, session.assignedReaderId || session.requestedReaderId)) {
-    return true;
-  }
-
-  // Open consultation access for connected participants
-  return true;
+  return false;
 }
 
 
@@ -5007,7 +4998,16 @@ app.post('/api/sessions/:id/message', async (req: Request, res: Response) => {
   }
 
   const { sender, senderName, text } = req.body;
-  if (!text || !text.trim()) {
+  if (sender !== 'customer' && sender !== 'astrologer') {
+    return res.status(400).json({ error: 'Invalid message sender.' });
+  }
+  if (sender === 'astrologer' && !verifyAstrologer(req, session.assignedReaderId || session.requestedReaderId)) {
+    return res.status(403).json({ error: 'Astrologer authentication required.' });
+  }
+  if (sender === 'customer' && !verifySessionAccess(req, session)) {
+    return res.status(403).json({ error: 'Customer session token required.' });
+  }
+  if (!text || typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'Message cannot be empty' });
   }
 
