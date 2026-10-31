@@ -6,8 +6,9 @@ const env: Record<string, any> = (typeof import.meta !== 'undefined' && (import.
   ? (import.meta as any).env 
   : (typeof process !== 'undefined' && process.env ? process.env : {});
 
-const rawSupabaseUrl = (env.VITE_SUPABASE_URL as string) || '';
-const rawSupabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string) || '';
+const rawSupabaseUrl = (env.VITE_SUPABASE_URL as string) || 'https://gvbvzvghwjsqisggicmu.supabase.co';
+// Supabase publishable key is safe for browser use; never place sb_secret_* keys here.
+const rawSupabaseAnonKey = (env.VITE_SUPABASE_ANON_KEY as string) || 'sb_publishable_NkHgQrxAHQoZvBr6ODA3uA_bv878BHh';
 
 /**
  * Safely extracts the project ref from a Supabase anon JWT token payload.
