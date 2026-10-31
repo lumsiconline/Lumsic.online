@@ -1,0 +1,30 @@
+name: Container Build Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - deploy/cloud-run-container
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Build backend container
+        run: docker build --tag lumsic-online:test .
