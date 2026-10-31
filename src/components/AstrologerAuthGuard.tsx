@@ -71,10 +71,9 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
           setAvailableReaders(data.readers);
           if (profile) {
             const userEmail = profile.email?.toLowerCase().trim();
-            const matched = data.readers.find((r: Reader) => 
-              (r as any).email?.toLowerCase() === userEmail ||
-              r.name.toLowerCase().includes(profile.displayName?.toLowerCase() || '___')
-            ) || data.readers[0];
+            const matched = data.readers.find((r: Reader) =>
+              (r as any).email?.toLowerCase().trim() === userEmail
+            );
             setMatchedReader(matched || null);
           }
         }
