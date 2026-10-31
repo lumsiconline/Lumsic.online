@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 const dashboardDir = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(dashboardDir, '../../..');
+const repositoryRoot = path.resolve(dashboardDir, '../..');
 
 export default defineConfig({
   root: dashboardDir,
