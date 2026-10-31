@@ -1,7 +1,8 @@
 // Lets the static frontend (GitHub Pages at lumsic.online) talk to the Express backend
 // (server.ts) that runs on Cloud Run / custom host.
 //
-// When running on lumsic.online or *.github.io, relative "/api/..." or "/uploads/..."
+// When running on lumsic.online, any lumsic.online subdomain, or *.github.io,
+// relative "/api/..." or "/uploads/..."
 // requests and SSE EventSource streams are routed to the live Cloud Run backend
 // instead of hitting the static host (which answers POST with "405 Method Not Allowed").
 // On local dev or unified Cloud Run deployments, relative URLs remain unchanged.
@@ -14,8 +15,8 @@ function resolveApiBase(): string {
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // When served from static GitHub Pages or custom domain lumsic.online without an Express proxy
-    if (host === 'lumsic.online' || host === 'www.lumsic.online' || host.endsWith('.github.io')) {
+    // Static hosting on the public site and dashboard subdomain has no local Express proxy.
+    if (host === 'lumsic.online' || host.endsWith('.lumsic.online') || host.endsWith('.github.io')) {
       return DEFAULT_CLOUD_RUN_BACKEND;
     }
   }

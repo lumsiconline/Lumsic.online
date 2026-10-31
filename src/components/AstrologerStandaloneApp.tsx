@@ -24,9 +24,13 @@ export const AstrologerStandaloneApp: React.FC<AstrologerStandaloneAppProps> = (
   }, []);
 
   const handleToggleOnline = (readerId: string, isOnline: boolean) => {
+    const astroToken = localStorage.getItem('astrodashboard_token') || '';
     fetch(`/api/readers/${readerId}/toggle`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(astroToken ? { 'x-astrologer-token': astroToken, Authorization: `Bearer ${astroToken}` } : {})
+      },
       body: JSON.stringify({ field: 'isOnline', value: isOnline })
     })
       .then(res => res.json())

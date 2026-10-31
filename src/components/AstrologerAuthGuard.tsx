@@ -16,7 +16,6 @@ import {
   ArrowLeft,
   UserCheck
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import type { AuthUserProfile } from '../lib/firebase';
 import { Reader } from '../types';
 import { READERS } from '../data/readers';
@@ -36,77 +35,46 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
   const [matchedReader, setMatchedReader] = useState<Reader | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // The production Express API is the source of truth for astrologer credentials.
+  // Restore its signed workstation token instead of requiring unrelated Supabase user_roles.
   useEffect(() => {
     let alive = true;
-    const loadProfile = async (user: any) => {
-      if (!user) { if (alive) { setProfile(null); setMatchedReader(null); setLoading(false); } return; }
-      const { data: roleRow, error } = await supabase
-        .from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
-      if (!alive) return;
-      if (error || !roleRow || !['astrologer','admin','super_admin'].includes(roleRow.role)) {
-        setProfile(null);
-        setErrorMsg('This Supabase account is not assigned an astrologer/admin role. Ask the administrator to assign access.');
-        setLoading(false);
+    const restoreSession = async () => {
+      const token = localStorage.getItem('astrodashboard_token') || '';
+      if (!token) {
+        if (alive) setLoading(false);
         return;
       }
-      const p: AuthUserProfile = {
-        uid: user.id, email: user.email || '', displayName: user.user_metadata?.full_name || user.email || 'Astrologer',
-        role: roleRow.role, isAdmin: ['admin','super_admin'].includes(roleRow.role),
-        isAstrologer: roleRow.role === 'astrologer' || ['admin','super_admin'].includes(roleRow.role)
-      };
-
-      // Restore the reader identity from Supabase on every page refresh.
-      // The old restore path only searched the public /api/readers response; when that
-      // response did not contain the staff email, matchedReader stayed null and the
-      // central inbox silently filtered out every customer chat.
-      let restoredReader: Reader | null = null;
-      const normalizedEmail = (user.email || '').toLowerCase().trim();
-      if (normalizedEmail) {
-        const { data: readerRows } = await supabase
-          .from('readers')
-          .select('id,name,email,astro_id,public_data')
-          .ilike('email', normalizedEmail)
-          .limit(1);
-        const row = readerRows?.[0];
-        if (row) {
-          const publicData = row.public_data || {};
-          restoredReader = {
-            ...publicData,
-            id: row.id || publicData.id,
-            name: row.name || publicData.name || p.displayName,
-            email: row.email || normalizedEmail,
-            astroId: row.astro_id || publicData.astroId || publicData.astro_id
-          } as Reader;
-        } else {
-          // Compatibility fallback for reader records still stored in the app API.
-          try {
-            const response = await fetch('/api/readers');
-            const payload = await response.json();
-            restoredReader = (payload.readers || []).find((r: Reader) =>
-              (r as any).email?.toLowerCase().trim() === normalizedEmail
-            ) || null;
-          } catch {}
+      try {
+        const response = await fetch('/api/astrologer/me', {
+          headers: { 'x-astrologer-token': token, Authorization: `Bearer ${token}` }
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.reader) throw new Error(payload.error || 'Your workstation session expired. Please sign in again.');
+        const reader = payload.reader as Reader;
+        const nextProfile: AuthUserProfile = {
+          uid: reader.id,
+          email: (reader as any).email || '',
+          displayName: reader.name || 'Astrologer',
+          role: 'astrologer',
+          isAdmin: false,
+          isAstrologer: true
+        };
+        if (alive) {
+          setMatchedReader(reader);
+          setProfile(nextProfile);
+          localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(reader));
         }
-      }
-      // The production app stores its canonical reader roster in app_state.
-      // The standalone dashboard may be opened by an approved admin/operator account
-      // that has no row in the separate public.readers table. Give admins the central
-      // Tamara workstation, and explicitly recognize Tamara's canonical staff email.
-      if (!restoredReader && (p.isAdmin || normalizedEmail === 'psychictamara@lumysic.com')) {
-        restoredReader = READERS.find((reader) =>
-          reader.id === 'psychic-tamara' || reader.astroId === 'LYS-10001'
-        ) || null;
-      }
-
-      if (alive) {
-        setMatchedReader(restoredReader);
-        setProfile(p);
-        setLoading(false);
+      } catch (error: any) {
+        localStorage.removeItem('astrodashboard_token');
+        localStorage.removeItem('astrodashboard_logged_in_astro');
+        if (alive) setErrorMsg(error?.message || 'Please sign in to your astrologer workstation.');
+      } finally {
+        if (alive) setLoading(false);
       }
     };
-    supabase.auth.getSession().then(({ data }) => loadProfile(data.session?.user || null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { void loadProfile(session?.user || null); });
-    return () => { alive = false; listener.subscription.unsubscribe(); };
+    void restoreSession();
+    return () => { alive = false; };
   }, []);
 
   // Copy Direct Astrologer Link
@@ -123,40 +91,52 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
   };
 
   const handleGoogleSignIn = async () => {
-    setErrorMsg('Use your approved Supabase staff email and password to sign in.');
+    setErrorMsg('Please sign in with the email address or Astro ID and password provided by your LUMSIC administrator.');
   };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) { setErrorMsg('Enter your Supabase staff email and password.'); return; }
+    if (!email.trim() || !password) { setErrorMsg('Enter your registered email/Astro ID and password.'); return; }
     try {
-      setErrorMsg(null); setSubmitting(true);
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-      if (error) throw error;
-      const user = data.user;
-      if (!user) throw new Error('Supabase did not return a user.');
-      const { data: roleRow, error: roleError } = await supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();
-      if (roleError || !roleRow || !['astrologer','admin','super_admin'].includes(roleRow.role)) {
-        await supabase.auth.signOut();
-        throw new Error('This account has no approved astrologer/admin role in Supabase.');
+      setErrorMsg(null);
+      setSubmitting(true);
+      const response = await fetch('/api/astrologer/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loginMethod: 'email', email: email.trim(), password })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Astrologer sign-in failed.');
+      if (payload.requiresPasswordSetup) {
+        throw new Error('Your astrologer account needs its first password setup. Please ask the LUMSIC administrator to complete the secure setup before signing in.');
       }
-      const readersResult = await supabase.from('readers').select('id,name,email,astro_id,public_data').ilike('email', user.email || '');
-      const row = readersResult.data?.[0];
-      if (row) {
-        const publicData = row.public_data || {};
-        setMatchedReader({ ...publicData, id: row.id, name: row.name, email: row.email, astroId: row.astro_id || publicData.astroId || publicData.astro_id } as Reader);
-      } else if (roleRow.role === 'astrologer') {
-        await supabase.auth.signOut();
-        throw new Error('No reader profile is linked to this email in Supabase.');
-      }
+      if (!payload.token || !payload.reader) throw new Error('The server did not return a valid astrologer session.');
+      const reader = payload.reader as Reader;
+      const nextProfile: AuthUserProfile = {
+        uid: reader.id,
+        email: (reader as any).email || email.trim(),
+        displayName: reader.name || email.trim(),
+        role: 'astrologer',
+        isAdmin: false,
+        isAstrologer: true
+      };
+      localStorage.setItem('astrodashboard_token', payload.token);
+      localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(reader));
+      setMatchedReader(reader);
+      setProfile(nextProfile);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Supabase sign-in failed.');
-    } finally { setSubmitting(false); }
+      setErrorMsg(err?.message || 'Astrologer sign-in failed.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null); setMatchedReader(null);
+    localStorage.removeItem('astrodashboard_token');
+    localStorage.removeItem('astrodashboard_logged_in_astro');
+    setProfile(null);
+    setMatchedReader(null);
+    setPassword('');
   };
 
   // Loading state

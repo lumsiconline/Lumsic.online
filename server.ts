@@ -2239,14 +2239,26 @@ function updateStats() {
 type SSEClient = {
   id: string;
   res: Response;
+  readerId: string;
+  isAdmin: boolean;
 };
 
 let sseClients: SSEClient[] = [];
 
 function broadcast(eventType: string, data: any) {
-  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  const payload = `event: ${eventType}\\ndata: ${JSON.stringify(data)}\\n\\n`;
   sseClients.forEach(client => {
     try {
+      if (!client.isAdmin && client.readerId !== 'psychic-tamara' && client.readerId !== 'LYS-10001') {
+        const sessionId = data?.sessionId || data?.session?.id || (data?.id && db.sessions[data.id] ? data.id : '');
+        const session = sessionId ? db.sessions[sessionId] : data?.session;
+        if (!session) return;
+        const ownsSession = [
+          session.assignedReaderId, session.requestedReaderId,
+          session.assignedAstroId, session.requestedAstroId
+        ].some(id => id && id === client.readerId);
+        if (!ownsSession) return;
+      }
       client.res.write(payload);
     } catch {
       // client dropped
@@ -2322,19 +2334,24 @@ setInterval(() => {
   }
 }, 1000);
 
-// API: SSE Stream
+// API: Authenticated, reader-scoped SSE stream for workstation updates.
 app.get('/api/events', (req: Request, res: Response) => {
+  const readerId = (req.query.readerId as string || '').trim();
+  const isAdmin = verifyAdmin(req);
+  if (!readerId || (!isAdmin && !verifyAstrologer(req, readerId))) {
+    return res.status(401).json({ error: 'Authenticated astrologer workstation access is required for live events.' });
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
   const clientId = 'client_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-  const newClient: SSEClient = { id: clientId, res };
+  const newClient: SSEClient = { id: clientId, res, readerId, isAdmin };
   sseClients.push(newClient);
 
-  // Send initial ping
-  res.write(`event: connected\ndata: ${JSON.stringify({ clientId })}\n\n`);
+  res.write(`event: connected\\ndata: ${JSON.stringify({ clientId })}\\n\\n`);
 
   req.on('close', () => {
     sseClients = sseClients.filter(c => c.id !== clientId);
@@ -2658,6 +2675,20 @@ app.post('/api/astrologer/login', authRateLimiter, (req: Request, res: Response)
     reader: sanitizeReader(reader),
     message: 'Astrologer login successful'
   });
+});
+
+// API: Restore the currently authenticated astrologer workstation session.
+app.get('/api/astrologer/me', (req: Request, res: Response) => {
+  const authHeader = (req.headers['authorization'] as string || '').trim();
+  const token = (req.headers['x-astrologer-token'] as string || '').trim() ||
+    (authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '');
+  const session = token ? ASTROLOGER_SESSIONS.get(token) : undefined;
+  if (!session || session.expiresAt <= Date.now()) {
+    return res.status(401).json({ error: 'Astrologer session expired. Please sign in again.' });
+  }
+  const reader = db.readers.find(r => r.id === session.readerId);
+  if (!reader) return res.status(401).json({ error: 'Astrologer account is no longer available.' });
+  res.json({ success: true, reader: sanitizeReader(reader), expiresAt: session.expiresAt });
 });
 
 // API: Astrologer Set Password (/api/astrologer/set-password)
@@ -5520,16 +5551,21 @@ app.get('/api/astroboard/stats', (_req: Request, res: Response) => {
 app.get('/api/astroboard/sessions', (req: Request, res: Response) => {
   updateStats();
   const readerId = (req.query.readerId as string || '').trim();
-  const showAll = req.query.all === 'true' || req.query.showAll === 'true' || req.query.isAdmin === 'true' || !readerId || readerId === 'psychic-tamara';
 
+  // Every inbox request must be authenticated. Only the central inbox owner
+  // (Psychic Tamara) and verified admins may receive the platform-wide queue.
+  if (!readerId || !verifyAstrologer(req, readerId)) {
+    return res.status(403).json({ error: 'Authenticated astrologer workstation access is required.' });
+  }
+
+  const showAll = verifyAdmin(req) || readerId === 'psychic-tamara' || readerId === 'LYS-10001';
   let list = Object.values(db.sessions).sort((a, b) => {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  // If specific reader filtering requested (and not showAll)
-  if (readerId && !showAll) {
-    list = list.filter(s => 
-      s.assignedReaderId === readerId || 
+  if (!showAll) {
+    list = list.filter(s =>
+      s.assignedReaderId === readerId ||
       s.requestedReaderId === readerId ||
       s.assignedAstroId === readerId ||
       s.requestedAstroId === readerId

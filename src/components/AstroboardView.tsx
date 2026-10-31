@@ -441,60 +441,78 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     const onCustomEvent = (event: Event) => handleBroadcastEvent(event as CustomEvent);
     window.addEventListener('lumsic_session_event', onCustomEvent);
 
-    // Real-time Server-Sent Events (SSE) for server-side events
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource('/api/events');
-      es.addEventListener('new_session', (e: MessageEvent) => {
-        try {
-          const session = JSON.parse(e.data);
-          if (session && session.id && isCentralInbox) {
-            setSessions(prev => [session, ...prev.filter(s => s.id !== session.id)]);
-            if (!dismissedSessionIdsRef.current.has(session.id) && activeChatSession?.id !== session.id) {
-              setIncomingAlertSession(session);
-              playRingtone();
+    // Authenticated fetch-based SSE stream: unlike EventSource, fetch lets us
+    // send the workstation token in a header rather than exposing it in the URL.
+    const streamController = new AbortController();
+    const streamToken = localStorage.getItem('astrodashboard_token') || '';
+    const streamReaderId = isCentralInbox ? 'psychic-tamara' : (currentAstrologer?.id || '');
+    const connectEventStream = async () => {
+      if (!streamToken || !streamReaderId) return;
+      const response = await fetch(`/api/events?readerId=${encodeURIComponent(streamReaderId)}`, {
+        headers: {
+          Accept: 'text/event-stream',
+          'x-astrologer-token': streamToken,
+          Authorization: `Bearer ${streamToken}`
+        },
+        signal: streamController.signal
+      });
+      if (!response.ok || !response.body) {
+        console.warn('Astroboard live event stream unavailable:', response.status);
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\\n\\n');
+        buffer = events.pop() || '';
+        for (const block of events) {
+          const eventName = block.split('\\n').find(line => line.startsWith('event:'))?.slice(6).trim();
+          const dataText = block.split('\\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\\n');
+          if (!eventName || !dataText || eventName === 'connected') continue;
+          try {
+            const raw = JSON.parse(dataText);
+            if (eventName === 'new_session') {
+              const session = raw.session || raw;
+              if (session?.id && isCentralInbox) {
+                setSessions(prev => [session, ...prev.filter(item => item.id !== session.id)]);
+                if (!dismissedSessionIdsRef.current.has(session.id) && activeChatSession?.id !== session.id) {
+                  setIncomingAlertSession(session);
+                  playRingtone();
+                }
+              }
+            } else if (eventName === 'message_received') {
+              const msg = raw.message || raw;
+              if (msg?.sessionId) {
+                setSessions(prev => prev.map(item => {
+                  if (item.id !== msg.sessionId) return item;
+                  const messages = item.messages || [];
+                  return messages.some(existing => existing.id === msg.id) ? item : { ...item, messages: [...messages, msg] };
+                }));
+                setActiveChatSession(current => {
+                  if (!current || current.id !== msg.sessionId) return current;
+                  const messages = current.messages || [];
+                  return messages.some(existing => existing.id === msg.id) ? current : { ...current, messages: [...messages, msg] };
+                });
+              }
             }
+          } catch (parseError) {
+            console.warn('Astroboard SSE event parse failed:', parseError);
           }
-        } catch (err) {
-          console.error('SSE new_session parse error:', err);
         }
-      });
-
-      es.addEventListener('message_received', (e: MessageEvent) => {
-        try {
-          const raw = JSON.parse(e.data);
-          const msg = raw.message || raw;
-          if (msg && msg.sessionId) {
-            setSessions(prev => prev.map(s => {
-              if (s.id === msg.sessionId) {
-                const msgs = s.messages || [];
-                if (!msgs.some(m => m.id === msg.id)) {
-                  return { ...s, messages: [...msgs, msg] };
-                }
-              }
-              return s;
-            }));
-            setActiveChatSession(curr => {
-              if (curr && curr.id === msg.sessionId) {
-                const msgs = curr.messages || [];
-                if (!msgs.some(m => m.id === msg.id)) {
-                  return { ...curr, messages: [...msgs, msg] };
-                }
-              }
-              return curr;
-            });
-          }
-        } catch (err) {
-          console.error('SSE message_received parse error:', err);
-        }
-      });
-    } catch (err) {
-      console.warn('SSE initialization notice:', err);
-    }
+      }
+    };
+    void connectEventStream().catch(error => {
+      if (!streamController.signal.aborted) console.warn('Astroboard live event stream notice:', error);
+    });
 
     return () => {
       clearInterval(interval);
       if (bc) bc.close();
+      streamController.abort();
       window.removeEventListener('lumsic_session_event', onCustomEvent);
       if (es) es.close();
     };

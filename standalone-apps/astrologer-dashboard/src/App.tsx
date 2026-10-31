@@ -1,49 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { AstrologerAuthGuard } from '../../../src/components/AstrologerAuthGuard';
-import { AstroboardView } from '../../../src/components/AstroboardView';
-import { AuthUserProfile } from '../../../src/lib/firebase';
-import { Reader } from '../../../src/types';
+import React from 'react';
+import { AstrologerStandaloneApp } from '../../../src/components/AstrologerStandaloneApp';
 
+// Keep the standalone dashboard on the exact same authentication, reader identity,
+// session polling, SSE, and chat implementation as the production astrologer portal.
 export default function App() {
-  const [readers, setReaders] = useState<Reader[]>([]);
-
-  useEffect(() => {
-    fetch('/api/readers')
-      .then(res => res.json())
-      .then(data => {
-        if (data.readers && Array.isArray(data.readers)) {
-          setReaders(data.readers);
-        }
-      })
-      .catch(console.error);
-  }, []);
-
-  const handleToggleOnline = (readerId: string, isOnline: boolean) => {
-    fetch(`/api/readers/${readerId}/toggle`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field: 'isOnline', value: isOnline })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.reader) {
-          setReaders(prev => prev.map(r => r.id === data.reader.id ? data.reader : r));
-        }
-      })
-      .catch(console.error);
-  };
-
-  return (
-    <AstrologerAuthGuard>
-      {(profile: AuthUserProfile, matchedReader: Reader | null) => (
-        <AstroboardView
-          onBackToSite={() => {
-            window.location.reload();
-          }}
-          readers={readers}
-          onToggleReaderOnline={handleToggleOnline}
-        />
-      )}
-    </AstrologerAuthGuard>
-  );
+  return <AstrologerStandaloneApp onBackToSite={() => { window.location.href = 'https://lumsic.online'; }} />;
 }
