@@ -332,10 +332,12 @@ export const WalletTransactionModal: React.FC<WalletTransactionModalProps> = ({
         await fetchWalletAndReferralData();
         setTimeout(() => setClaimRewardNotice(null), 4000);
       } else {
-        alert(data.error || 'Unable to claim reward.');
+        setClaimRewardNotice(data.error || 'Unable to claim reward.');
+        setTimeout(() => setClaimRewardNotice(null), 4000);
       }
     } catch (e: any) {
-      alert(e.message || 'Error claiming reward.');
+      setClaimRewardNotice(e.message || 'Error claiming reward.');
+      setTimeout(() => setClaimRewardNotice(null), 4000);
     } finally {
       setClaimRewardLoading(false);
     }

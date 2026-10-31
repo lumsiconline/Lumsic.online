@@ -225,7 +225,8 @@ export function openPayUTestModal(options: {
       if (simData.success) {
         options.onSuccess(txnid);
       } else {
-        alert(simData.error || 'Test verification failed');
+        console.warn('PayU test verification notice:', simData.error || 'Test verification failed');
+        options.onCancel();
       }
     } catch {
       modalContainer.remove();

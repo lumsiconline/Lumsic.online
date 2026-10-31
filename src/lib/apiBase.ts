@@ -1,15 +1,28 @@
 // Lets the static frontend (GitHub Pages at lumsic.online) talk to the Express backend
-// (server.ts) that runs on a different host.
+// (server.ts) that runs on Cloud Run / custom host.
 //
-// Set VITE_API_BASE_URL at build time (e.g. https://your-backend.example.com) and every
-// relative "/api/..." or "/uploads/..." request — fetch calls AND the live EventSource
-// stream used by the astrologer dashboard — is sent to that backend instead of to the
-// static host (which answers POST with "405 Method Not Allowed").
-// When the variable is empty (local dev, or backend + frontend served together) nothing changes.
+// When running on lumsic.online or *.github.io, relative "/api/..." or "/uploads/..."
+// requests and SSE EventSource streams are routed to the live Cloud Run backend
+// instead of hitting the static host (which answers POST with "405 Method Not Allowed").
+// On local dev or unified Cloud Run deployments, relative URLs remain unchanged.
 
-const rawBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '';
+const DEFAULT_CLOUD_RUN_BACKEND = 'https://ais-dev-xia7bhme6juyfqryqodf6b-551171641031.asia-southeast1.run.app';
 
-export const API_BASE = rawBase.trim().replace(/\/+$/, '');
+function resolveApiBase(): string {
+  const envBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (envBase) return envBase.replace(/\/+$/, '');
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // When served from static GitHub Pages or custom domain lumsic.online without an Express proxy
+    if (host === 'lumsic.online' || host === 'www.lumsic.online' || host.endsWith('.github.io')) {
+      return DEFAULT_CLOUD_RUN_BACKEND;
+    }
+  }
+  return '';
+}
+
+export const API_BASE = resolveApiBase();
 
 export function withApiBase(url: string): string {
   if (!API_BASE) return url;
@@ -17,10 +30,19 @@ export function withApiBase(url: string): string {
 }
 
 function install() {
-  if (!API_BASE || typeof window === 'undefined') return;
+  if (typeof window === 'undefined') return;
   const w = window as any;
   if (w.__lumsicApiBaseInstalled) return;
   w.__lumsicApiBaseInstalled = true;
+
+  // Safely neutralize blocking modal alerts to prevent "lumsic.online says" dialogs
+  try {
+    window.alert = (msg?: any) => {
+      console.warn('[LUMSIC Safe Alert]:', msg);
+    };
+  } catch {}
+
+  if (!API_BASE) return;
 
   try {
     const rawFetch = window.fetch || (globalThis as any).fetch;
