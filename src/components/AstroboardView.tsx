@@ -295,7 +295,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       let serverSessions: ConsultationSession[] = [];
       try {
         const astroToken = localStorage.getItem('astrodashboard_token') || '';
-        const readerId = currentAstrologer?.id || 'psychic-tamara';
+        const readerId = isCentralInbox ? 'psychic-tamara' : (currentAstrologer?.id || 'unassigned');
         const url = `/api/astroboard/sessions?readerId=${encodeURIComponent(readerId)}`;
         const res = await fetch(url, {
           headers: {
