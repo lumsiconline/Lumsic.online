@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install dependencies (tsx is currently a devDependency and is required by npm start).
 COPY package*.json ./
-RUN npm install --include=dev
+RUN npm ci --include=dev
 
 # Build the Vite frontend and include the Express backend.
 COPY . .
