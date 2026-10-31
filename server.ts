@@ -2108,7 +2108,8 @@ setInterval(() => {
   const now = new Date();
 
   Object.values(db.sessions).forEach(session => {
-    if (session.status === 'active' && session.acceptedAt) {
+    const hasFirstHumanReply = (session.messages || []).some((message: ChatMessage) => message.sender === 'astrologer' && !message.isAiMessage);
+    if (session.status === 'active' && session.acceptedAt && hasFirstHumanReply) {
       session.totalDurationSeconds += 1;
       
       // Calculate remaining free seconds
