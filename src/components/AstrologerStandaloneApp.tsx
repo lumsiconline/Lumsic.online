@@ -44,10 +44,11 @@ export const AstrologerStandaloneApp: React.FC<AstrologerStandaloneAppProps> = (
 
   return (
     <AstrologerAuthGuard onBackToSite={handleExit}>
-      {(_profile: AuthUserProfile, _matchedReader: Reader | null) => (
+      {(_profile: AuthUserProfile, matchedReader: Reader | null) => (
         <AstroboardView
           onBackToSite={handleExit}
           readers={readers}
+          authenticatedReader={matchedReader}
           onToggleReaderOnline={handleToggleOnline}
         />
       )}
