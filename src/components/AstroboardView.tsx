@@ -748,9 +748,13 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     } : null);
 
     try {
+      const astroToken = localStorage.getItem('astrodashboard_token') || '';
       const res = await fetch(`/api/sessions/${activeChatSession.id}/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(astroToken ? { 'x-astrologer-token': astroToken, 'Authorization': `Bearer ${astroToken}` } : {})
+        },
         body: JSON.stringify({
           sender: 'astrologer',
           senderName: activeAstroName,
