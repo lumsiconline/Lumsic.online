@@ -88,7 +88,10 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
 
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/sessions/${session.id}`);
+        const sessionToken = sessionStorage.getItem(`lumsic_session_token_${session.id}`);
+        const res = await fetch(`/api/sessions/${session.id}`, {
+          headers: sessionToken ? { 'x-session-token': sessionToken } : {}
+        });
         const data = await res.json();
         if (data.session && Array.isArray(data.session.messages)) {
           setMessages(prev => {
