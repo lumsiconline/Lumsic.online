@@ -74,6 +74,7 @@ interface AstroboardViewProps {
   onBackToSite: () => void;
   onOpenAdmin?: () => void;
   readers?: Reader[];
+  authenticatedReader?: Reader | null;
   onToggleReaderOnline?: (readerId: string, isOnline: boolean) => void;
 }
 
@@ -110,6 +111,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   onBackToSite,
   onOpenAdmin,
   readers: initialReaders,
+  authenticatedReader,
   onToggleReaderOnline
 }) => {
   // Readers List - default to READERS (Psychic Tamara & all 48 astrologers)
@@ -119,6 +121,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
 
   // Currently authenticated Astrologer - defaults to Psychic Tamara (LYS-10001)
   const [currentAstrologer, setCurrentAstrologer] = useState<Reader | null>(() => {
+    if (authenticatedReader) return authenticatedReader;
     try {
       const saved = localStorage.getItem('astrodashboard_logged_in_astro');
       if (saved) {
@@ -130,6 +133,13 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     }
     return (initialReaders && initialReaders.length > 0 ? initialReaders[0] : null) || READERS[0];
   });
+
+  // Keep the dashboard identity tied to the authenticated astrologer account.
+  useEffect(() => {
+    if (!authenticatedReader) return;
+    setCurrentAstrologer(authenticatedReader);
+    localStorage.setItem('astrodashboard_logged_in_astro', JSON.stringify(authenticatedReader));
+  }, [authenticatedReader?.id]);
 
   // Active navigation section
   const [activeNav, setActiveNav] = useState<SidebarSection>('dashboard');
@@ -282,7 +292,9 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       let serverSessions: ConsultationSession[] = [];
       try {
         const astroToken = localStorage.getItem('astrodashboard_token') || '';
-        const url = '/api/astroboard/sessions?all=true';
+        const url = authenticatedReader && currentAstrologer?.id
+          ? `/api/astroboard/sessions?readerId=${encodeURIComponent(currentAstrologer.id)}`
+          : '/api/astroboard/sessions?all=true';
         const res = await fetch(url, {
           headers: {
             ...(astroToken ? { 'x-astrologer-token': astroToken, 'Authorization': `Bearer ${astroToken}` } : {}),
@@ -476,7 +488,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       window.removeEventListener('lumsic_session_event', onCustomEvent);
       if (es) es.close();
     };
-  }, [activeChatSession?.id]);
+  }, [activeChatSession?.id, currentAstrologer?.id, authenticatedReader?.id]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
