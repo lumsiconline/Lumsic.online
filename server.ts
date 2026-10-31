@@ -1,8 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response, NextFunction } from 'express';
 import nodemailer from 'nodemailer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
@@ -3982,6 +3986,239 @@ app.post('/api/payu/simulate-test-response', async (req: Request, res: Response)
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// =========================================================================
+// RAZORPAY STANDARD WEB CHECKOUT GATEWAY (TEST & PRODUCTION)
+// =========================================================================
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_TtnEYNftIawfUS';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'q7wxEnG7Kmmpg8sMZOWDWAuR';
+
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET
+});
+
+/**
+ * STEP 1: BACKEND - Create Order
+ * Endpoint: POST /api/create-order
+ * Request: { amount (paise), currency, receipt, notes }
+ * Return: { order_id, amount, currency }
+ * Minimum amount: 100 paise
+ */
+app.post('/api/create-order', async (req: Request, res: Response) => {
+  try {
+    const { amount, currency = 'INR', receipt, notes } = req.body;
+
+    // Validate amount is provided
+    if (amount === undefined || amount === null) {
+      return res.status(400).json({ error: 'Amount is required' });
+    }
+
+    const numAmount = Math.round(Number(amount));
+
+    // Validate amount >= 100 paise (or smallest currency unit)
+    if (isNaN(numAmount) || numAmount < 100) {
+      return res.status(400).json({ 
+        error: 'Minimum order amount is 100 paise (or equivalent in smallest currency unit).' 
+      });
+    }
+
+    // Check credentials configuration
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+      return res.status(401).json({ error: 'Razorpay credentials not configured or unauthorized.' });
+    }
+
+    const orderOptions = {
+      amount: numAmount,
+      currency: (currency || 'INR').toUpperCase(),
+      receipt: receipt || `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      notes: notes || {}
+    };
+
+    const order = await razorpay.orders.create(orderOptions);
+
+    return res.status(200).json({
+      order_id: order.id,
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      receipt: order.receipt,
+      key_id: RAZORPAY_KEY_ID
+    });
+  } catch (error: any) {
+    console.error('Razorpay create-order error:', error);
+    
+    // Handle auth failures (return 401)
+    if (
+      error?.statusCode === 401 || 
+      (error?.error && error?.error?.code === 'BAD_REQUEST_ERROR' && String(error?.error?.description || '').toLowerCase().includes('auth'))
+    ) {
+      return res.status(401).json({ error: 'Razorpay authentication failed. Verify API credentials.' });
+    }
+
+    // Handle Razorpay API errors (return 500 or upstream code)
+    const statusCode = error?.statusCode || 500;
+    return res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+      error: error?.error?.description || error?.message || 'Failed to create Razorpay order'
+    });
+  }
+});
+
+/**
+ * STEP 3: BACKEND - Verify Signature
+ * Endpoint: POST /api/verify-payment
+ * Algorithm: HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET)
+ * Compare generated signature with razorpay_signature
+ * Return success only if signatures match
+ */
+app.post('/api/verify-payment', async (req: Request, res: Response) => {
+  try {
+    const { 
+      razorpay_payment_id, 
+      razorpay_order_id, 
+      razorpay_signature,
+      customerId,
+      amount,
+      currency,
+      isPaise
+    } = req.body;
+
+    // Missing fields: return 400
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: razorpay_payment_id, razorpay_order_id, and razorpay_signature are required.'
+      });
+    }
+
+    if (!RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Server Razorpay configuration error: Secret key missing.' 
+      });
+    }
+
+    // Algorithm: HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET)
+    const expectedSignature = crypto
+      .createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    const expectedBuffer = Buffer.from(expectedSignature);
+    const signatureBuffer = Buffer.from(String(razorpay_signature));
+
+    // Compare generated signature with razorpay_signature securely
+    const signaturesMatch = 
+      expectedBuffer.length === signatureBuffer.length &&
+      crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+
+    // Signature mismatch: return 400, do NOT mark as paid
+    if (!signaturesMatch) {
+      console.warn(`[Razorpay] Signature mismatch for order ${razorpay_order_id} & payment ${razorpay_payment_id}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Payment verification failed: Signature mismatch.'
+      });
+    }
+
+    // Signature verified successfully!
+    let walletInfo = null;
+
+    // If customer ID and amount are provided, credit wallet and record ledger entry
+    if (customerId) {
+      const parsedAmt = typeof amount === 'number' ? amount : parseFloat(amount || '0');
+      // If amount was provided in paise/smallest unit, convert to standard currency units
+      const verifiedAmount = isPaise ? (parsedAmt / 100) : (parsedAmt > 0 ? parsedAmt : 0);
+      const verifiedCurrency = (currency || 'USD').toUpperCase();
+      const currSymbol = BACKEND_CURRENCY_CONFIG[verifiedCurrency]?.symbol || '$';
+
+      if (verifiedAmount > 0) {
+        const wallet = getOrCreateCustomerWallet(customerId, verifiedCurrency);
+        wallet.purchasedBalance += verifiedAmount;
+
+        // 100% First Recharge Bonus: Awarded ONCE per eligible account upon verified recharge
+        const isFirstRecharge = !wallet.firstRechargeCompleted && !wallet.hasClaimedFirstRechargeBonus;
+        let creditedBonus = 0;
+        if (isFirstRecharge) {
+          creditedBonus = verifiedAmount;
+          wallet.bonusBalance += creditedBonus;
+          wallet.firstRechargeCompleted = true;
+          wallet.hasClaimedFirstRechargeBonus = true;
+          wallet.firstRechargeDate = new Date().toISOString();
+        }
+
+        wallet.totalBalance = wallet.purchasedBalance + wallet.bonusBalance;
+        wallet.updatedAt = new Date().toISOString();
+
+        // Create immutable transaction ledger entry
+        const rechargeTx: WalletTransaction = {
+          id: 'tx_rzp_' + Date.now(),
+          customerId,
+          orderId: razorpay_order_id,
+          title: `Wallet Recharge (+${currSymbol}${verifiedAmount.toFixed(2)})`,
+          subtitle: `Verified via Razorpay (${razorpay_payment_id})`,
+          amount: verifiedAmount,
+          currency: verifiedCurrency,
+          type: 'credit',
+          subType: 'recharge',
+          status: 'Completed',
+          rechargePart: verifiedAmount,
+          bonusPart: creditedBonus,
+          date: new Date().toISOString(),
+          paymentMethod: `Razorpay (${razorpay_payment_id})`
+        };
+
+        db.walletTransactions.unshift(rechargeTx);
+
+        // If first recharge, record 100% promotional bonus in ledger
+        if (creditedBonus > 0) {
+          const bonusTx: WalletTransaction = {
+            id: 'tx_rzp_bon_' + (Date.now() + 1),
+            customerId,
+            orderId: razorpay_order_id + '-BONUS',
+            title: `100% First Recharge Bonus (+${currSymbol}${creditedBonus.toFixed(2)})`,
+            subtitle: 'Promotional Extra Cash Match (100% First Recharge Offer)',
+            amount: creditedBonus,
+            currency: verifiedCurrency,
+            type: 'credit',
+            subType: 'first_recharge_bonus',
+            status: 'Completed',
+            rechargePart: 0,
+            bonusPart: creditedBonus,
+            date: new Date().toISOString(),
+            paymentMethod: 'LUMSIC Promotional Match'
+          };
+          db.walletTransactions.unshift(bonusTx);
+        }
+
+        saveDB();
+        broadcast('wallet_updated', { customerId, wallet });
+
+        walletInfo = {
+          totalBalance: wallet.totalBalance,
+          purchasedBalance: wallet.purchasedBalance,
+          bonusBalance: wallet.bonusBalance,
+          creditedAmount: verifiedAmount,
+          creditedBonus
+        };
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Payment verified successfully.',
+      payment_id: razorpay_payment_id,
+      order_id: razorpay_order_id,
+      wallet: walletInfo
+    });
+  } catch (err: any) {
+    console.error('Razorpay verify-payment error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error verifying Razorpay payment.'
+    });
   }
 });
 

@@ -7,6 +7,7 @@ import {
 import { formatCurrencyAmount, getCurrencySymbol, MINIMUM_RECHARGE_AMOUNT, getMinRechargeAmount } from '../utils/currency';
 import { Reader, WalletTransaction, ReferralData } from '../types';
 import { initiatePayUPayment, redirectToPayUHostedCheckout, verifyPayUPayment, openPayUTestModal } from '../lib/payu';
+import { RazorpayCheckoutButton } from './RazorpayCheckoutButton';
 
 interface ExpiringItem {
   id: string;
@@ -78,6 +79,7 @@ export const WalletTransactionModal: React.FC<WalletTransactionModalProps> = ({
   const [isRecharging, setIsRecharging] = useState(false);
   const [rechargeError, setRechargeError] = useState<string | null>(null);
   const [rechargeSuccessNotice, setRechargeSuccessNotice] = useState<string | null>(null);
+  const [selectedPaymentGateway, setSelectedPaymentGateway] = useState<'razorpay' | 'payu'>('razorpay');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedRefLink, setCopiedRefLink] = useState(false);
   const [claimRewardLoading, setClaimRewardLoading] = useState(false);
@@ -1207,35 +1209,94 @@ export const WalletTransactionModal: React.FC<WalletTransactionModalProps> = ({
                 <div className="pt-2 text-[10px] text-gray-500 leading-tight">
                   <p className="flex items-center gap-1 text-emerald-700 font-medium mb-0.5">
                     <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                    <span>PayU Hosted Checkout (256-Bit SHA-512 Encrypted)</span>
+                    <span>256-Bit Encrypted Standard Checkout (Razorpay / PayU)</span>
                   </p>
                   Terms: 100% bonus awarded on first successful verified recharge. Non-withdrawable and applied instantly upon payment confirmation.
                 </div>
               </div>
 
+              {/* Payment Gateway Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                  Select Payment Gateway:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentGateway('razorpay')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      selectedPaymentGateway === 'razorpay'
+                        ? 'border-[#0C2340] bg-[#0C2340] text-white shadow-sm ring-2 ring-blue-500/20'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>Razorpay</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/30 text-blue-200 font-semibold uppercase">
+                      Cards/UPI
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentGateway('payu')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      selectedPaymentGateway === 'payu'
+                        ? 'border-[#581C87] bg-[#581C87] text-white shadow-sm ring-2 ring-purple-500/20'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>PayU Hosted</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Confirm & Recharge Button */}
-              <button
-                type="button"
-                onClick={handleExecuteRecharge}
-                disabled={isRecharging || isBelowMinimum}
-                className={`w-full py-3 rounded-2xl text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  isBelowMinimum 
-                    ? 'bg-gray-300 cursor-not-allowed' 
-                    : 'bg-[#581C87] hover:bg-[#4C1D95] active:scale-95'
-                }`}
-              >
-                {isRecharging ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Connecting to PayU Checkout...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Pay with PayU &amp; Add {currencySymbol}{currentRechargeAmount.toFixed(2)}</span>
-                  </>
-                )}
-              </button>
+              {selectedPaymentGateway === 'razorpay' ? (
+                <RazorpayCheckoutButton
+                  amount={currentRechargeAmount}
+                  currency={currentCurrency}
+                  customerId={effectiveCustomerId}
+                  customerName="LUMSIC Seeker"
+                  disabled={isBelowMinimum}
+                  onSuccess={async (result) => {
+                    const credited = result.creditedAmount || currentRechargeAmount;
+                    const bonus = isFirstRechargeEligible ? credited : 0;
+                    onRechargeSuccess(credited, bonus);
+                    await fetchWalletAndReferralData();
+                    setIsRechargeModalOpen(false);
+                    setRechargeSuccessNotice(
+                      `Razorpay payment verified! Added ${currencySymbol}${currentRechargeAmount.toFixed(2)} to your balance.`
+                    );
+                    setTimeout(() => setRechargeSuccessNotice(null), 6000);
+                  }}
+                  onError={(err) => {
+                    setRechargeError(typeof err === 'string' ? err : err.message || 'Razorpay checkout error.');
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleExecuteRecharge}
+                  disabled={isRecharging || isBelowMinimum}
+                  className={`w-full py-3 rounded-2xl text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    isBelowMinimum 
+                      ? 'bg-gray-300 cursor-not-allowed' 
+                      : 'bg-[#581C87] hover:bg-[#4C1D95] active:scale-95'
+                  }`}
+                >
+                  {isRecharging ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Connecting to PayU Checkout...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Pay with PayU &amp; Add {currencySymbol}{currentRechargeAmount.toFixed(2)}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         )}

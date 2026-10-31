@@ -156,12 +156,20 @@ export interface ConsultationSession {
   acceptedAt?: string; // ISO - timer begins ONLY when this is set!
   startedAt?: string; // ISO - free chat start timestamp
   endedAt?: string; // ISO
+  startTime?: string; // ISO
+  endTime?: string; // ISO
+  updatedAt?: string; // ISO
+  readerId?: string;
+  readerName?: string;
+  readerAvatar?: string;
+  freeMinutesTotal?: number;
+  isFreeTier?: boolean;
   lastMessageText?: string;
   lastMessageAt?: string;
   unreadForOperator?: boolean;
   unreadForCustomer?: boolean;
   messages: ChatMessage[];
-  paymentStatus: 'free_tier' | 'paid_active' | 'pending_topup' | 'settled';
+  paymentStatus?: 'free_tier' | 'paid_active' | 'pending_topup' | 'settled' | string;
 }
 
 export type AdminRole = 

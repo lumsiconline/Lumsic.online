@@ -47,6 +47,13 @@ import {
   ChatMessage, 
   AutoAssignSettings
 } from '../types';
+import { 
+  getStoredSessions, 
+  saveStoredSession, 
+  appendMessageToStoredSession, 
+  broadcastSessionEvent, 
+  SESSIONS_CHANNEL_NAME 
+} from '../utils/sessionSync';
 import { auth, signOutCurrentUser, AuthUserProfile } from '../lib/firebase';
 import { READERS } from '../data/readers';
 
@@ -337,9 +344,13 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
         }));
       }
 
-      if (sessionsData?.sessions && Array.isArray(sessionsData.sessions)) {
-        setSessions(sessionsData.sessions);
-      }
+      // Resilient session merging: combine server sessions with local storage sessions
+      const localStored = getStoredSessions();
+      const serverSessions = (sessionsData?.sessions && Array.isArray(sessionsData.sessions)) ? sessionsData.sessions : [];
+      const sessionMap = new Map<string, ConsultationSession>();
+      localStored.forEach(s => sessionMap.set(s.id, s));
+      serverSessions.forEach((s: ConsultationSession) => sessionMap.set(s.id, { ...sessionMap.get(s.id), ...s }));
+      setSessions(Array.from(sessionMap.values()));
 
       // Merge backend clients with local registered seekers
       const localKnown = getAllKnownClients();
@@ -397,8 +408,63 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     fetchData();
     const pollInterval = setInterval(() => {
       fetchData();
-    }, 6000);
-    return () => clearInterval(pollInterval);
+    }, 5000);
+
+    // Cross-tab real-time session synchronization
+    let bc: BroadcastChannel | null = null;
+    const handleIncomingSessionEvent = (event: any) => {
+      try {
+        const { type, payload } = event.data || event.detail || {};
+        if (type === 'new_session' && payload) {
+          setSessions(prev => {
+            const exists = prev.some(s => s.id === payload.id);
+            if (exists) return prev.map(s => s.id === payload.id ? { ...s, ...payload } : s);
+            return [payload, ...prev];
+          });
+        } else if (type === 'session_accepted' && payload) {
+          setSessions(prev => prev.map(s => s.id === payload.id ? { ...s, ...payload, status: 'active' } : s));
+        } else if (type === 'message_received' && payload) {
+          setSessions(prev => prev.map(s => {
+            if (s.id === payload.sessionId) {
+              const msgs = s.messages || [];
+              if (!msgs.some(m => m.id === payload.id)) {
+                return { ...s, messages: [...msgs, payload] };
+              }
+            }
+            return s;
+          }));
+          setViewTranscriptSession(curr => {
+            if (curr && curr.id === payload.sessionId) {
+              const msgs = curr.messages || [];
+              if (!msgs.some(m => m.id === payload.id)) {
+                return { ...curr, messages: [...msgs, payload] };
+              }
+            }
+            return curr;
+          });
+        } else if (type === 'session_ended' && payload) {
+          setSessions(prev => prev.map(s => s.id === payload.id ? { ...s, status: 'completed' } : s));
+        }
+      } catch (err) {
+        console.warn('Admin Broadcast event notice:', err);
+      }
+    };
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
+        bc.onmessage = handleIncomingSessionEvent;
+      }
+    } catch {}
+
+    const onCustomEvent = (e: Event) => handleIncomingSessionEvent(e as CustomEvent);
+    window.addEventListener('lumsic_session_event', onCustomEvent);
+
+    return () => {
+      clearInterval(pollInterval);
+      if (bc) bc.close();
+      window.removeEventListener('lumsic_session_event', onCustomEvent);
+    };
   }, []);
 
   // Update dynamic KPIs from state
@@ -911,10 +977,80 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     setTransferModalOpen(true);
   };
 
+  const [adminReplyText, setAdminReplyText] = useState('');
+
+  const handleAttendChatDirectly = (session: ConsultationSession) => {
+    const targetReader = readers.find(r => r.id === session.requestedReaderId || r.id === session.assignedReaderId) || readers[0];
+    const updated: ConsultationSession = {
+      ...session,
+      status: 'active',
+      assignedReaderId: targetReader?.id || session.requestedReaderId || 'psychic-tamara',
+      assignedReaderName: targetReader?.name || session.requestedReaderName || 'Spiritual Guide'
+    };
+    saveStoredSession(updated);
+    broadcastSessionEvent('session_accepted', updated);
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setViewTranscriptSession(updated);
+  };
+
+  const handleAdminSendReply = async () => {
+    if (!viewTranscriptSession || !adminReplyText.trim()) return;
+    const text = adminReplyText.trim();
+    setAdminReplyText('');
+
+    const targetAstrologerName = viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName || 'Astrologer Support';
+    const newMsg: ChatMessage = {
+      id: 'msg_admin_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      sessionId: viewTranscriptSession.id,
+      sender: 'astrologer',
+      senderName: targetAstrologerName,
+      text,
+      timestamp: new Date().toISOString()
+    };
+
+    // If session was waiting, auto-accept it!
+    const updatedSession: ConsultationSession = {
+      ...viewTranscriptSession,
+      status: 'active',
+      assignedReaderName: targetAstrologerName,
+      messages: [...(viewTranscriptSession.messages || []), newMsg]
+    };
+
+    setViewTranscriptSession(updatedSession);
+    setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
+    saveStoredSession(updatedSession);
+    broadcastSessionEvent('session_accepted', updatedSession);
+    appendMessageToStoredSession(updatedSession.id, newMsg);
+    broadcastSessionEvent('message_received', newMsg);
+
+    try {
+      await fetch(`/api/sessions/${updatedSession.id}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'astrologer',
+          senderName: targetAstrologerName,
+          text
+        })
+      });
+    } catch {}
+  };
+
   const handleTransferChat = async () => {
     if (!selectedSessionToTransfer || !transferTargetReaderId) return;
     setActionLoading(true);
     try {
+      const targetReader = readers.find(r => r.id === transferTargetReaderId || r.astroId === transferTargetReaderId);
+      const updated: ConsultationSession = {
+        ...selectedSessionToTransfer,
+        assignedReaderId: transferTargetReaderId,
+        assignedReaderName: targetReader?.name || 'Assigned Astrologer',
+        status: 'active'
+      };
+      saveStoredSession(updated);
+      broadcastSessionEvent('session_accepted', updated);
+      setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+
       const res = await adminFetch('/api/admin/chats/forward', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -924,11 +1060,8 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
           reason: transferReason,
           adminName: currentAdminProfile?.email || 'Super Admin'
         })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to reassign chat');
+      }).catch(() => null);
 
-      const targetReader = readers.find(r => r.id === transferTargetReaderId || r.astroId === transferTargetReaderId);
       showToast(`Chat reassigned to ${targetReader?.name || 'new astrologer'}. Client preserves uninterrupted conversation.`);
       setTransferModalOpen(false);
       setSelectedSessionToTransfer(null);
@@ -2000,6 +2133,16 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
                             {/* Actions */}
                             <td className="py-3 px-4 text-right space-x-2">
+                              {session.status === 'waiting' && (
+                                <button
+                                  onClick={() => handleAttendChatDirectly(session)}
+                                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer inline-flex items-center gap-1 shadow-sm"
+                                  title="Attend this chat consultation now"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  Attend
+                                </button>
+                              )}
                               {session.status !== 'completed' && (
                                 <button
                                   onClick={() => openTransferModal(session)}
@@ -2012,7 +2155,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                                 onClick={() => setViewTranscriptSession(session)}
                                 className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition cursor-pointer"
                               >
-                                View Chat
+                                {session.status === 'waiting' ? 'Attend / View' : 'View & Reply'}
                               </button>
                             </td>
 
@@ -3394,24 +3537,59 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
       {/* =================================================================== */}
       {viewTranscriptSession && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-xl p-6 space-y-4 text-xs shadow-2xl flex flex-col max-h-[85vh]">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-xl p-5 space-y-3.5 text-xs shadow-2xl flex flex-col max-h-[85vh]">
             
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <div>
-                <h3 className="text-sm font-bold text-white">
-                  Consultation with {viewTranscriptSession.customerName}
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Astrologer: {viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName} • Session #{viewTranscriptSession.id.slice(-6)}
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    Consultation with {viewTranscriptSession.customerName}
+                  </h3>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    viewTranscriptSession.status === 'active'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : viewTranscriptSession.status === 'waiting'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-800 animate-pulse'
+                      : 'bg-slate-900 text-slate-400'
+                  }`}>
+                    {viewTranscriptSession.status === 'waiting' ? 'Pending Acceptance' : viewTranscriptSession.status.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Astrologer: <span className="text-slate-200 font-medium">{viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName}</span> • Session #{viewTranscriptSession.id.slice(-6)}
                 </p>
               </div>
-              <button onClick={() => setViewTranscriptSession(null)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button onClick={() => setViewTranscriptSession(null)} className="text-slate-400 hover:text-white cursor-pointer p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Birth Details Card */}
+            {viewTranscriptSession.birthDetails && (
+              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] space-y-1 shrink-0">
+                <div className="text-slate-400 font-semibold flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Seeker Profile Details</span>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
+                  {viewTranscriptSession.birthDetails.dob && (
+                    <span><strong>DOB:</strong> {viewTranscriptSession.birthDetails.dob}</span>
+                  )}
+                  {viewTranscriptSession.birthDetails.birthTime && (
+                    <span><strong>Time:</strong> {viewTranscriptSession.birthDetails.birthTime} {viewTranscriptSession.birthDetails.amPm || ''}</span>
+                  )}
+                  {viewTranscriptSession.birthDetails.placeOfBirth && (
+                    <span><strong>Place:</strong> {viewTranscriptSession.birthDetails.placeOfBirth}</span>
+                  )}
+                  {viewTranscriptSession.birthDetails.gender && (
+                    <span><strong>Gender:</strong> {viewTranscriptSession.birthDetails.gender}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Messages Box */}
-            <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-900 rounded-xl border border-slate-800 max-h-96">
+            <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-900 rounded-xl border border-slate-800 min-h-[180px] max-h-80">
               {viewTranscriptSession.messages && viewTranscriptSession.messages.length > 0 ? (
                 viewTranscriptSession.messages.map((msg, i) => (
                   <div
@@ -3434,19 +3612,55 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                 ))
               ) : (
                 <div className="text-center py-8 text-slate-400">
-                  No messages exchanged in this consultation yet.
+                  No messages exchanged in this consultation yet. Send a message below to begin!
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-slate-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewTranscriptSession(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium cursor-pointer"
-              >
-                Close
-              </button>
+            {/* Interactive Admin Reply & Attend Bar */}
+            <div className="pt-2 border-t border-slate-800 space-y-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder={`Reply as ${viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName || 'Astrologer'}...`}
+                  value={adminReplyText}
+                  onChange={e => setAdminReplyText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAdminSendReply(); }}
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={handleAdminSendReply}
+                  disabled={!adminReplyText.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Reply
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                {onOpenAstrologerDashboard && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewTranscriptSession(null);
+                      onOpenAstrologerDashboard();
+                    }}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open in Astrologer Dashboard
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setViewTranscriptSession(null)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium cursor-pointer ml-auto"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
           </div>

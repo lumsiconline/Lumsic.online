@@ -62,6 +62,13 @@ import {
 } from 'lucide-react';
 import { VERIFIED_REVIEWS_POOL } from '../data/reviewsData';
 import { READERS } from '../data/readers';
+import { 
+  getStoredSessions, 
+  saveStoredSession, 
+  appendMessageToStoredSession, 
+  broadcastSessionEvent, 
+  SESSIONS_CHANNEL_NAME 
+} from '../utils/sessionSync';
 
 interface AstroboardViewProps {
   onBackToSite: () => void;
@@ -272,27 +279,65 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   const fetchSessions = async () => {
     try {
       setIsLoadingSessions(true);
-      const astroToken = localStorage.getItem('astrodashboard_token') || '';
-      const url = '/api/astroboard/sessions?all=true';
-      const res = await fetch(url, {
-        headers: {
-          ...(astroToken ? { 'x-astrologer-token': astroToken, 'Authorization': `Bearer ${astroToken}` } : {}),
-          'x-astrologer-id': currentAstrologer?.id || ''
+      let serverSessions: ConsultationSession[] = [];
+      try {
+        const astroToken = localStorage.getItem('astrodashboard_token') || '';
+        const url = '/api/astroboard/sessions?all=true';
+        const res = await fetch(url, {
+          headers: {
+            ...(astroToken ? { 'x-astrologer-token': astroToken, 'Authorization': `Bearer ${astroToken}` } : {}),
+            'x-astrologer-id': currentAstrologer?.id || ''
+          }
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.sessions && Array.isArray(data.sessions)) {
+            serverSessions = data.sessions;
+          }
+        }
+      } catch (netErr) {
+        // Network resilience for static hosting / CDN environments
+      }
+
+      // Combine server sessions with stored sessions for 100% resilience across static/CDN and live hosting
+      const localSessions = getStoredSessions();
+      const sessionMap = new Map<string, ConsultationSession>();
+      localSessions.forEach(s => sessionMap.set(s.id, s));
+      serverSessions.forEach(s => {
+        const existing = sessionMap.get(s.id);
+        if (existing) {
+          const existingMsgs = existing.messages || [];
+          const sMsgs = s.messages || [];
+          const mergedMsgs = [...existingMsgs];
+          sMsgs.forEach(m => {
+            if (!mergedMsgs.some(em => em.id === m.id)) {
+              mergedMsgs.push(m);
+            }
+          });
+          sessionMap.set(s.id, { ...existing, ...s, messages: mergedMsgs });
+        } else {
+          sessionMap.set(s.id, s);
         }
       });
-      const data = await res.json();
-      if (data.sessions && Array.isArray(data.sessions)) {
-        setSessions(data.sessions);
+
+      const combinedSessions = Array.from(sessionMap.values()).sort((a, b) => {
+        const tA = new Date(a.createdAt || a.startTime || 0).getTime();
+        const tB = new Date(b.createdAt || b.startTime || 0).getTime();
+        return tB - tA;
+      });
+
+      if (combinedSessions.length > 0 || serverSessions.length > 0) {
+        setSessions(combinedSessions);
 
         // Keep activeChatSession up to date with new incoming messages
         setActiveChatSession(current => {
           if (!current) return null;
-          const updated = data.sessions.find((s: ConsultationSession) => s.id === current.id);
+          const updated = combinedSessions.find((s: ConsultationSession) => s.id === current.id);
           return updated || current;
         });
 
         // Detect newly landing incoming chat: any waiting or pending session triggers screen pop!
-        const incomingCandidate = data.sessions.find((s: ConsultationSession) => {
+        const incomingCandidate = combinedSessions.find((s: ConsultationSession) => {
           if (dismissedSessionIdsRef.current.has(s.id)) return false;
           if (activeChatSession && activeChatSession.id === s.id) return false;
           const statusStr = s.status as string;
@@ -302,10 +347,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
         if (incomingCandidate && !incomingAlertSession) {
           seenSessionIdsRef.current.add(incomingCandidate.id);
           setIncomingAlertSession(incomingCandidate);
+          playRingtone();
         }
 
         if (!initialSessionsLoadedRef.current) {
-          data.sessions.forEach((s: ConsultationSession) => {
+          combinedSessions.forEach((s: ConsultationSession) => {
             const statusStr = s.status as string;
             if (statusStr !== 'waiting' && statusStr !== 'pending') {
               seenSessionIdsRef.current.add(s.id);
@@ -328,7 +374,52 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       fetchSessions();
     }, 2000);
 
-    // Real-time Server-Sent Events (SSE) for 0ms instantaneous screen pop and audio ringtone
+    // Cross-Tab BroadcastChannel Synchronization for 0ms instantaneous screen pop and audio ringtone
+    const handleBroadcastEvent = (e: any) => {
+      const { type, data } = e.detail || e.data || {};
+      if (!type || !data) return;
+
+      if (type === 'new_session' && data.id) {
+        setSessions(prev => [data, ...prev.filter(s => s.id !== data.id)]);
+        if (!dismissedSessionIdsRef.current.has(data.id) && activeChatSession?.id !== data.id) {
+          seenSessionIdsRef.current.add(data.id);
+          setIncomingAlertSession(data);
+          playRingtone();
+        }
+      } else if (type === 'message_received' && data.sessionId) {
+        setSessions(prev => prev.map(s => {
+          if (s.id === data.sessionId) {
+            const msgs = s.messages || [];
+            if (!msgs.some(m => m.id === data.id)) {
+              return { ...s, messages: [...msgs, data] };
+            }
+          }
+          return s;
+        }));
+        setActiveChatSession(curr => {
+          if (curr && curr.id === data.sessionId) {
+            const msgs = curr.messages || [];
+            if (!msgs.some(m => m.id === data.id)) {
+              return { ...curr, messages: [...msgs, data] };
+            }
+          }
+          return curr;
+        });
+      }
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
+        bc.onmessage = (event) => handleBroadcastEvent(event);
+      }
+    } catch {}
+
+    const onCustomEvent = (event: Event) => handleBroadcastEvent(event as CustomEvent);
+    window.addEventListener('lumsic_session_event', onCustomEvent);
+
+    // Real-time Server-Sent Events (SSE) for server-side events
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/events');
@@ -381,6 +472,8 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
 
     return () => {
       clearInterval(interval);
+      if (bc) bc.close();
+      window.removeEventListener('lumsic_session_event', onCustomEvent);
       if (es) es.close();
     };
   }, [activeChatSession?.id]);
@@ -463,6 +556,20 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       const activeAstrologerId = currentAstrologer?.id || readers[0]?.id || 'psychic-tamara';
       const activeAstrologerName = currentAstrologer?.name || readers[0]?.name || 'Spiritual Guide';
 
+      // 1. Immediate resilient local update and cross-tab broadcast (0ms latency)
+      const updatedSession: ConsultationSession = {
+        ...session,
+        status: 'active',
+        assignedReaderId: activeAstrologerId,
+        assignedReaderName: activeAstrologerName,
+        acceptedAt: new Date().toISOString()
+      };
+      saveStoredSession(updatedSession);
+      broadcastSessionEvent('session_accepted', updatedSession);
+      setActiveChatSession(updatedSession);
+      setSessions(prev => prev.map(s => s.id === session.id ? updatedSession : s));
+
+      // 2. Non-blocking sync with backend
       const res = await fetch(`/api/sessions/${session.id}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -471,32 +578,34 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           readerName: activeAstrologerName
         })
       });
-      const data = await res.json();
-      if (data.session) {
-        setActiveChatSession(data.session);
-        fetchSessions();
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data && data.session) {
+          saveStoredSession(data.session);
+          setActiveChatSession(data.session);
+          fetchSessions();
+        }
       }
     } catch (err) {
-      console.error('Failed to accept/pick up chat:', err);
+      console.warn('Backend accept notice (using resilient local session):', err);
     }
   };
 
   // Decline a pending chat
   const handleDeclineChat = async (sessionId: string) => {
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/decline`, {
+      if (activeChatSession?.id === sessionId) {
+        setActiveChatSession(null);
+      }
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      broadcastSessionEvent('session_declined', { id: sessionId });
+
+      await fetch(`/api/sessions/${sessionId}/decline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (data.session) {
-        if (activeChatSession?.id === sessionId) {
-          setActiveChatSession(null);
-        }
-        fetchSessions();
-      }
+      }).catch(() => {});
     } catch (err) {
-      console.error('Failed to decline chat:', err);
+      console.warn('Decline chat notice:', err);
     }
   };
 
@@ -579,19 +688,27 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
   // End / Complete active session
   const handleEndSession = async (sessionId: string) => {
     try {
+      setActiveChatSession(prev => prev && prev.id === sessionId ? { ...prev, status: 'completed' } : prev);
+      const stored = getStoredSessions();
+      const target = stored.find(s => s.id === sessionId);
+      if (target) {
+        const completed = { ...target, status: 'completed' as const };
+        saveStoredSession(completed);
+        broadcastSessionEvent('session_ended', completed);
+      }
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'completed' } : s));
+
       const res = await fetch(`/api/sessions/${sessionId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      const data = await res.json();
-      if (data.session) {
-        if (activeChatSession?.id === sessionId) {
-          setActiveChatSession(data.session);
-        }
+      const data = await res.json().catch(() => ({}));
+      if (data && data.session) {
+        saveStoredSession(data.session);
         fetchSessions();
       }
     } catch (err) {
-      console.error('Failed to end session:', err);
+      console.warn('End session notice:', err);
     }
   };
 
@@ -734,7 +851,7 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     setInputText('');
 
     const optimisticMsg: ChatMessage = {
-      id: 'msg_astro_' + Date.now(),
+      id: 'msg_astro_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       sessionId: activeChatSession.id,
       sender: 'astrologer',
       senderName: activeAstroName,
@@ -742,10 +859,15 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       timestamp: new Date().toISOString()
     };
 
+    // 1. Immediately update activeChatSession state
     setActiveChatSession(prev => prev ? {
       ...prev,
-      messages: [...prev.messages, optimisticMsg]
+      messages: [...(prev.messages || []), optimisticMsg]
     } : null);
+
+    // 2. Persist to local storage and broadcast to seeker and admin tabs
+    appendMessageToStoredSession(activeChatSession.id, optimisticMsg);
+    broadcastSessionEvent('message_received', optimisticMsg);
 
     try {
       const astroToken = localStorage.getItem('astrodashboard_token') || '';
@@ -761,14 +883,17 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
           text: textToSend
         })
       });
-      const data = await res.json();
-      if (data.session) {
-        setActiveChatSession(data.session);
-        setSessions(prev => prev.map(s => s.id === data.session.id ? data.session : s));
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data && data.session) {
+          saveStoredSession(data.session);
+          setActiveChatSession(data.session);
+          setSessions(prev => prev.map(s => s.id === data.session.id ? data.session : s));
+        }
       }
       fetchSessions();
     } catch (err) {
-      console.error('Failed to send message:', err);
+      console.warn('Backend astrologer message notice (operating resiliently):', err);
     }
   };
 
