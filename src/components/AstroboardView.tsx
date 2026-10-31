@@ -444,7 +444,10 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
     // Real-time Server-Sent Events (SSE) for server-side events
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/api/events');
+      const streamToken = localStorage.getItem('astrodashboard_token') || '';
+      const streamReaderId = isCentralInbox ? 'psychic-tamara' : (currentAstrologer?.id || '');
+      const streamParams = new URLSearchParams({ readerId: streamReaderId, token: streamToken });
+      es = new EventSource(`/api/events?${streamParams.toString()}`);
       es.addEventListener('new_session', (e: MessageEvent) => {
         try {
           const session = JSON.parse(e.data);
