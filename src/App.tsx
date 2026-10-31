@@ -633,34 +633,59 @@ export default function App() {
     const userPob = startData?.birthDetails?.placeOfBirth || 'Not specified';
 
     try {
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
-      let res: Response;
-      try {
-        res = await fetch('/api/sessions/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            customerId,
-            firstName: userName,
-            customerName: userName,
-            readingType: startData?.readingType || targetReader.category || 'Live Consultation',
-            topic: startData?.topic || 'Love, Career & Life Guidance',
-            initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
-            birthDetails: startData?.birthDetails || {
-              name: userName,
-              gender: userGender,
-              dob: userDob,
-              birthTime: userTob,
-              placeOfBirth: userPob
-            },
-            requestedReaderId: targetReader.id
-          })
-        });
-      } finally {
-        window.clearTimeout(timeoutId);
+      // One id for every attempt: if a gateway times out (504) after the server already created
+      // the chat, the retry gets the same chat back instead of creating a duplicate.
+      const clientRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const payload = JSON.stringify({
+        clientRequestId,
+        customerId,
+        firstName: userName,
+        customerName: userName,
+        readingType: startData?.readingType || targetReader.category || 'Live Consultation',
+        topic: startData?.topic || 'Love, Career & Life Guidance',
+        initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
+        birthDetails: startData?.birthDetails || {
+          name: userName,
+          gender: userGender,
+          dob: userDob,
+          birthTime: userTob,
+          placeOfBirth: userPob
+        },
+        requestedReaderId: targetReader.id
+      });
+
+      const MAX_ATTEMPTS = 3;
+      let res: Response | null = null;
+      let lastError: any = null;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 20000);
+        try {
+          res = await fetch('/api/sessions/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: payload
+          });
+          lastError = null;
+          // Retry only temporary gateway/server hiccups (cold start, proxy timeout).
+          if ([502, 503, 504].includes(res.status) && attempt < MAX_ATTEMPTS) {
+            await new Promise(r => window.setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          break;
+        } catch (netErr: any) {
+          lastError = netErr;
+          res = null;
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(r => window.setTimeout(r, 1500 * attempt));
+            continue;
+          }
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
       }
+      if (!res) throw lastError || new Error('Unable to reach the chat server. Please try again.');
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
