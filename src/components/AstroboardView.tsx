@@ -335,12 +335,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       });
 
       const combinedSessions = Array.from(sessionMap.values())
-        .filter(session => isCentralInbox && (
-          session.assignedReaderId === 'psychic-tamara' ||
-          session.assignedAstroId === 'LYS-10001' ||
-          session.requestedReaderId === 'psychic-tamara' ||
-          session.requestedAstroId === 'LYS-10001'
-        ))
+        // The server query is already scoped to readerId=psychic-tamara.
+        // Do not re-filter by optional assignment metadata here: newly-created
+        // sessions can be returned by the central inbox API before those legacy
+        // fields are populated, which previously made fresh chats disappear.
+        .filter(() => isCentralInbox)
         .sort((a, b) => {
         const tA = new Date(a.createdAt || a.startTime || 0).getTime();
         const tB = new Date(b.createdAt || b.startTime || 0).getTime();
