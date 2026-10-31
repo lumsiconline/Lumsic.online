@@ -317,8 +317,7 @@ function verifyAstrologer(req: Request, readerId?: string): boolean {
 
   const authHeader = (req.headers['authorization'] as string || '').trim();
   const token = (req.headers['x-astrologer-token'] as string || '').trim() ||
-                (authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '') ||
-                (req.query.token as string || '').trim();
+                (authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '');
 
   if (token) {
     const session = ASTROLOGER_SESSIONS.get(token);
