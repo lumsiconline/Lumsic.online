@@ -19,6 +19,7 @@ import {
 import { supabase } from '../lib/supabase';
 import type { AuthUserProfile } from '../lib/firebase';
 import { Reader } from '../types';
+import { READERS } from '../data/readers';
 
 interface AstrologerAuthGuardProps {
   children: (profile: AuthUserProfile, astrologerReader: Reader | null) => React.ReactNode;
@@ -87,6 +88,16 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
           } catch {}
         }
       }
+      // The production app stores its canonical reader roster in app_state.
+      // The standalone dashboard may be opened by an approved admin/operator account
+      // that has no row in the separate public.readers table. Give admins the central
+      // Tamara workstation, and explicitly recognize Tamara's canonical staff email.
+      if (!restoredReader && (p.isAdmin || normalizedEmail === 'psychictamara@lumysic.com')) {
+        restoredReader = READERS.find((reader) =>
+          reader.id === 'psychic-tamara' || reader.astroId === 'LYS-10001'
+        ) || null;
+      }
+
       if (alive) {
         setMatchedReader(restoredReader);
         setProfile(p);
