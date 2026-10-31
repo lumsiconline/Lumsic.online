@@ -34,7 +34,6 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
   const [submitting, setSubmitting] = useState(false);
   const [matchedReader, setMatchedReader] = useState<Reader | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [availableReaders, setAvailableReaders] = useState<Reader[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -54,32 +53,50 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
         role: roleRow.role, isAdmin: ['admin','super_admin'].includes(roleRow.role),
         isAstrologer: roleRow.role === 'astrologer' || ['admin','super_admin'].includes(roleRow.role)
       };
-      setProfile(p);
-      setLoading(false);
+
+      // Restore the reader identity from Supabase on every page refresh.
+      // The old restore path only searched the public /api/readers response; when that
+      // response did not contain the staff email, matchedReader stayed null and the
+      // central inbox silently filtered out every customer chat.
+      let restoredReader: Reader | null = null;
+      const normalizedEmail = (user.email || '').toLowerCase().trim();
+      if (normalizedEmail) {
+        const { data: readerRows } = await supabase
+          .from('readers')
+          .select('id,name,email,astro_id,public_data')
+          .ilike('email', normalizedEmail)
+          .limit(1);
+        const row = readerRows?.[0];
+        if (row) {
+          const publicData = row.public_data || {};
+          restoredReader = {
+            ...publicData,
+            id: row.id || publicData.id,
+            name: row.name || publicData.name || p.displayName,
+            email: row.email || normalizedEmail,
+            astroId: row.astro_id || publicData.astroId || publicData.astro_id
+          } as Reader;
+        } else {
+          // Compatibility fallback for reader records still stored in the app API.
+          try {
+            const response = await fetch('/api/readers');
+            const payload = await response.json();
+            restoredReader = (payload.readers || []).find((r: Reader) =>
+              (r as any).email?.toLowerCase().trim() === normalizedEmail
+            ) || null;
+          } catch {}
+        }
+      }
+      if (alive) {
+        setMatchedReader(restoredReader);
+        setProfile(p);
+        setLoading(false);
+      }
     };
     supabase.auth.getSession().then(({ data }) => loadProfile(data.session?.user || null));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { void loadProfile(session?.user || null); });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
-
-  // Fetch readers and match authenticated astrologer
-  useEffect(() => {
-    fetch('/api/readers')
-      .then(res => res.json())
-      .then(data => {
-        if (data.readers && Array.isArray(data.readers)) {
-          setAvailableReaders(data.readers);
-          if (profile) {
-            const userEmail = profile.email?.toLowerCase().trim();
-            const matched = data.readers.find((r: Reader) =>
-              (r as any).email?.toLowerCase().trim() === userEmail
-            );
-            setMatchedReader(matched || null);
-          }
-        }
-      })
-      .catch(() => {});
-  }, [profile]);
 
   // Copy Direct Astrologer Link
   const handleCopyLink = () => {
@@ -116,7 +133,7 @@ export const AstrologerAuthGuard: React.FC<AstrologerAuthGuardProps> = ({ childr
       const row = readersResult.data?.[0];
       if (row) {
         const publicData = row.public_data || {};
-        setMatchedReader({ ...publicData, id: row.id, name: row.name, email: row.email, astroId: row.astro_id } as Reader);
+        setMatchedReader({ ...publicData, id: row.id, name: row.name, email: row.email, astroId: row.astro_id || publicData.astroId || publicData.astro_id } as Reader);
       } else if (roleRow.role === 'astrologer') {
         await supabase.auth.signOut();
         throw new Error('No reader profile is linked to this email in Supabase.');
