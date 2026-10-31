@@ -2188,9 +2188,14 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
       clearTimeout(supabaseSaveTimer);
       supabaseSaveTimer = null;
     }
-    if (supabaseAdmin && supabaseSavePending) {
-      void flushSupabaseState().finally(() => process.exit(0));
-      setTimeout(() => process.exit(1), 9000).unref();
+    if (supabaseAdmin) {
+      const forceExit = setTimeout(() => process.exit(1), 9000);
+      forceExit.unref();
+      void (async () => {
+        if (supabaseSavePending) await flushSupabaseState();
+        await supabaseSaveQueue;
+        process.exit(0);
+      })();
       return;
     }
     flushDBSync();
