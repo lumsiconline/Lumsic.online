@@ -44,6 +44,10 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
     return session.freeSecondsRemaining > 0 ? session.freeSecondsRemaining : 300;
   });
+  // Consultation time begins only after the human astrologer sends their first reply.
+  const [humanReplyStarted, setHumanReplyStarted] = useState<boolean>(() =>
+    (session.messages || []).some(message => message.sender === 'astrologer' && !message.isAiMessage)
+  );
   
   const [isEnded, setIsEnded] = useState<boolean>(session.status === 'completed');
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -60,7 +64,23 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     if (session.messages && session.messages.length > messages.length) {
       setMessages(session.messages);
     }
+    if ((session.messages || []).some(message => message.sender === 'astrologer' && !message.isAiMessage)) {
+      setHumanReplyStarted(true);
+    }
   }, [session.messages]);
+
+  // Add one local confirmation only; it is not an astrologer/AI reply.
+  useEffect(() => {
+    setMessages(prev => prev.some(message => message.id === `welcome_${session.id}`) ? prev : [{
+      id: `welcome_${session.id}`,
+      sessionId: session.id,
+      sender: 'system',
+      senderName: 'Lumsic',
+      text: `Thank you for connecting with Lumsic. ${session.requestedReaderName || reader.name} will join you shortly.`,
+      timestamp: new Date().toISOString(),
+      isSystemNotice: true
+    }, ...prev]);
+  }, [session.id]);
 
   // Real-time synchronization: Poll for new astrologer/operator messages
   useEffect(() => {
@@ -88,7 +108,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
 
   // Live Timer Countdown: runs every second
   useEffect(() => {
-    if (isEnded) return;
+    if (isEnded || !humanReplyStarted) return;
 
     const timer = setInterval(() => {
       setSecondsRemaining(prev => {
@@ -103,7 +123,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isEnded]);
+  }, [isEnded, humanReplyStarted]);
 
   // Auto-scroll to latest message
   useEffect(() => {
