@@ -483,10 +483,12 @@ async function sendRealEmailOtp(toEmail: string, otpCode: string, recipientName:
     const smtpHost = process.env.SMTP_HOST || (db as any).smtpConfig?.host || 'smtp.gmail.com';
     const smtpPort = parseInt(process.env.SMTP_PORT || (db as any).smtpConfig?.port || '465', 10);
     const smtpSecure = smtpPort === 465;
-    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || (db as any).smtpConfig?.user || 'lumsic.online@gmail.com';
-    const rawPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || (db as any).smtpConfig?.pass || 'ppqkscwktntyhqes';
+    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || (db as any).smtpConfig?.user || '';
+    // Credentials must be supplied through server environment or the protected admin SMTP settings.
+    // Never keep an app password in source code.
+    const rawPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || (db as any).smtpConfig?.pass || '';
     const smtpPass = rawPass.replace(/\s+/g, '');
-    const fromAddress = process.env.SMTP_FROM || `"LUMSIC Sanctuary" <${smtpUser}>`;
+    const fromAddress = process.env.SMTP_FROM || (smtpUser ? `"LUMSIC Sanctuary" <${smtpUser}>` : 'LUMSIC Sanctuary');
 
     if (!smtpPass) {
       console.warn(`[AUTH EMAIL] Outbound SMTP requires SMTP_USER and SMTP_PASS (or GMAIL_APP_PASSWORD) in environment. Stored OTP code securely in memory for verification.`);
@@ -504,9 +506,6 @@ async function sendRealEmailOtp(toEmail: string, otpCode: string, recipientName:
         user: smtpUser,
         pass: smtpPass
       },
-      tls: {
-        rejectUnauthorized: false
-      }
     });
 
     const info = await transporter.sendMail({
@@ -6350,6 +6349,11 @@ async function setupApp() {
     } else {
       res.redirect('/astrologer.html');
     }
+  });
+
+  // Lightweight health endpoint for Cloud Run startup/liveness checks.
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.status(200).json({ ok: true, service: 'lumsic-api', timestamp: new Date().toISOString() });
   });
 
   // Strict 404 JSON response for any unhandled /api/* requests (never return HTML)
