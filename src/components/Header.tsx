@@ -26,7 +26,6 @@ export interface HeaderProps {
   onOpenWallet?: () => void;
   isOwnerAdmin?: boolean;
   onOpenAdmin?: () => void;
-  onOpenAstrologerDashboard?: () => void;
 }
 
 // Quick suggestions for the search bar
@@ -64,7 +63,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWallet,
   isOwnerAdmin = false,
   onOpenAdmin,
-  onOpenAstrologerDashboard
 }) => {
   // Navigation & Menu States
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -474,19 +472,6 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="hidden sm:inline font-semibold tracking-wide">Admin Panel</span>
-                </button>
-              )}
-
-              {/* ASTROLOGER DASHBOARD BUTTON */}
-              {isOwnerAdmin && onOpenAstrologerDashboard && (
-                <button
-                  type="button"
-                  onClick={onOpenAstrologerDashboard}
-                  className="flex items-center gap-1.5 px-3 py-1.5 h-9 sm:h-9.5 rounded-full bg-gradient-to-r from-indigo-600/30 via-indigo-500/30 to-purple-600/30 hover:from-indigo-600/40 hover:to-purple-600/40 border border-indigo-400/80 text-indigo-200 hover:text-white text-xs font-bold transition-all shadow-[0_0_14px_rgba(99,102,241,0.3)] hover:shadow-[0_0_20px_rgba(99,102,241,0.5)] active:scale-95 cursor-pointer shrink-0"
-                  title="Open Astrologer Workstation & Live Console"
-                >
-                  <Compass className="w-4 h-4 text-amber-300 shrink-0" />
-                  <span className="hidden sm:inline font-semibold tracking-wide">Astrologer Dashboard</span>
                 </button>
               )}
 
