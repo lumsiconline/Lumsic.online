@@ -1097,7 +1097,7 @@ export default function App() {
         }}
         onOpenAstrologerDashboard={() => {
           setIsDrawerOpen(false);
-          setIsAstroboardView(true);
+          setIsAdminView(true);
         }}
       />
 
@@ -1263,7 +1263,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setIsAstroboardView(true)}
+            onClick={() => setIsAdminView(true)}
             className="px-3 py-2 rounded-xl bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-400/50 shadow-xl backdrop-blur-md text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
             title="Open Astrologer Workstation & Live Console"
           >

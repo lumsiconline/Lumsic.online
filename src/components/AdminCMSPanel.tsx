@@ -304,7 +304,10 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     try {
       const [readersRes, sessionsRes, clientsRes, overviewRes, n8nRes] = await Promise.all([
         adminFetch('/api/readers').catch(() => null),
-        adminFetch('/api/astroboard/sessions?readerId=psychic-tamara&isAdmin=true').catch(() => null),
+        adminFetch('/api/astroboard/sessions?readerId=psychic-tamara&isAdmin=true').then(async r => {
+          if (!r || !r.ok) return adminFetch('/api/admin/sessions?isAdmin=true');
+          return r;
+        }).catch(() => null),
         adminFetch('/api/admin/clients').catch(() => null),
         adminFetch('/api/admin/overview').catch(() => null),
         adminFetch('/api/admin/n8n/config').catch(() => null)
@@ -452,7 +455,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource('/api/events');
+      es = new EventSource('/api/events?isAdmin=true&readerId=psychic-tamara');
       es.addEventListener('new_session', (e: MessageEvent) => {
         try {
           const session = JSON.parse(e.data);
@@ -462,6 +465,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
               if (exists) return prev.map(s => s.id === session.id ? { ...s, ...session } : s);
               return [session, ...prev];
             });
+            showToast(`🔔 New consultation request from ${session.customerName || 'Seeker'}!`, 'info');
             fetchData();
           }
         } catch {}

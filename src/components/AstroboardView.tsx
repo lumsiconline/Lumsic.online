@@ -524,7 +524,6 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       if (bc) bc.close();
       streamController.abort();
       window.removeEventListener('lumsic_session_event', onCustomEvent);
-      if (es) es.close();
     };
   }, [activeChatSession?.id, currentAstrologer?.id, authenticatedReader?.id]);
 
