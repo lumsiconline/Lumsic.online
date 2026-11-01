@@ -4610,9 +4610,12 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
 
   const sessionToken = generateSecureToken('sess_key');
 
-  // CRITICAL REQUIREMENT:
-  // All chats land to Psychic Tamara (assignedReaderId = 'psychic-tamara'),
-  // while preserving what the user selected in requestedReaderId and requestedReaderName!
+  // Route the consultation to the astrologer selected by the customer.
+  // Psychic Tamara's central inbox remains platform-wide via the reader-scoped
+  // sessions API and SSE broadcast rules for the central inbox owner.
+  const assignedReaderId = requestedReader.id || psychicTamara.id;
+  const assignedReaderName = requestedReader.name || psychicTamara.name || 'Psychic Tamara';
+  const assignedAstroId = requestedReader.astroId || requestedReader.id || psychicTamara.astroId || 'LYS-10001';
   const session: ConsultationSession = {
     id: sessionId,
     sessionToken,
@@ -4625,11 +4628,11 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     requestedReaderId: requestedReader.id,
     requestedReaderName: requestedReader.name,
     requestedAstroId: requestedReader.astroId || requestedReader.id,
-    assignedReaderId: 'psychic-tamara',
-    assignedReaderName: psychicTamara.name || 'Psychic Tamara',
-    assignedAstroId: psychicTamara.astroId || 'LYS-10001',
-    targetHumanReaderId: 'psychic-tamara',
-    targetHumanReaderName: psychicTamara.name || 'Psychic Tamara',
+    assignedReaderId,
+    assignedReaderName,
+    assignedAstroId,
+    targetHumanReaderId: assignedReaderId,
+    targetHumanReaderName: assignedReaderName,
     status: 'waiting', // 'waiting' triggers the incoming alert pop-up and marimba ringtone in the Astrologer Dashboard!
     unreadForOperator: true,
     isAiSession: false,
