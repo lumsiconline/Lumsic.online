@@ -17,7 +17,6 @@ base: '/',
         input: {
           main: path.resolve(__dirname, 'index.html'),
           admin: path.resolve(__dirname, 'admin.html'),
-          astrologer: path.resolve(__dirname, 'astrologer.html'),
         },
       },
     },
