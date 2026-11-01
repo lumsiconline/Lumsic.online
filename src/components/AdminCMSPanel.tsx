@@ -1,52 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
-  Users, 
   MessageSquare, 
-  UserCheck, 
-  Settings, 
-  LogOut, 
-  Plus, 
+  Users, 
+  ShieldCheck, 
   Search, 
   Clock, 
   CheckCircle2, 
   AlertCircle, 
   X, 
-  Edit3, 
-  Trash2, 
-  KeyRound, 
-  Video, 
-  Phone, 
-  ExternalLink, 
-  RefreshCw, 
+  Send, 
   ArrowRightLeft, 
-  ShieldCheck, 
+  Sparkles, 
+  RefreshCw, 
+  LogOut, 
   ChevronRight, 
   User, 
-  Mail, 
-  Sparkles,
-  Menu,
-  Eye,
-  AlertTriangle,
-  Send,
-  Workflow,
-  Cpu,
-  Zap,
-  Play,
-  Activity,
-  ArrowLeft,
-  Upload,
-  ImageIcon,
-  Camera,
+  Calendar, 
+  MapPin, 
+  Eye, 
+  Volume2, 
+  VolumeX, 
+  Bell, 
   Check,
-  Compass
+  Zap,
+  Activity,
+  ArrowUpRight,
+  Filter,
+  ChevronDown,
+  UserCheck,
+  CheckCircle
 } from 'lucide-react';
-import { 
-  Reader, 
-  ConsultationSession, 
-  ChatMessage, 
-  AutoAssignSettings
-} from '../types';
 import { 
   getStoredSessions, 
   saveStoredSession, 
@@ -57,6 +41,7 @@ import {
 import { auth, signOutCurrentUser, AuthUserProfile, db } from '../lib/firebase';
 import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { READERS } from '../data/readers';
+import { Reader, ConsultationSession, ChatMessage } from '../types';
 
 interface AdminCMSPanelProps {
   onBackToSite: () => void;
@@ -65,189 +50,47 @@ interface AdminCMSPanelProps {
   onOpenAstrologerDashboard?: () => void;
 }
 
-export interface ClientRecord {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  accountStatus: 'active' | 'free_tier' | 'vip' | string;
-  isFirstTimeUser: boolean;
-  freeMinutesUsed: boolean;
-  totalConsultations: number;
-  birthDetails?: any;
-  registeredAt: string;
-}
-
-// 38 Verified Default Platform Clients
-export const DEFAULT_PLATFORM_CLIENTS: ClientRecord[] = [
-  { id: 'usr_c001', name: 'Elena Rostova', email: 'elena.rostova@gmail.com', phone: '+44 7700 900142', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-08-12T10:15:00Z' },
-  { id: 'usr_c002', name: 'Marcus Chen', email: 'marcus.chen@outlook.com', phone: '+1 415 555 0192', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-08-19T14:30:00Z' },
-  { id: 'usr_c003', name: 'Sarah Jenkins', email: 'sarah.j.mystic@yahoo.co.uk', phone: '+44 7911 123456', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 12, registeredAt: '2026-08-25T09:45:00Z' },
-  { id: 'usr_c004', name: 'Priya Sharma', email: 'priya.sharma91@gmail.com', phone: '+91 98201 12345', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-09-01T16:20:00Z' },
-  { id: 'usr_c005', name: 'Liam O\'Connor', email: 'liam.oconnor@dublin.ie', phone: '+353 87 123 4567', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-09-05T11:10:00Z' },
-  { id: 'usr_c006', name: 'Sophia Martinez', email: 'sophia.m.stars@gmail.com', phone: '+1 305 555 0147', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 9, registeredAt: '2026-09-10T18:00:00Z' },
-  { id: 'usr_c007', name: 'Arjun Patel', email: 'arjun.patel.vedic@gmail.com', phone: '+91 98450 67890', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-09-14T08:30:00Z' },
-  { id: 'usr_c008', name: 'Chloe Bennett', email: 'chloe.bennett@london.co.uk', phone: '+44 7722 334455', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-09-18T13:40:00Z' },
-  { id: 'usr_c009', name: 'Daniel Kim', email: 'daniel.kim.astro@gmail.com', phone: '+1 213 555 0183', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-09-22T15:25:00Z' },
-  { id: 'usr_c010', name: 'Natasha Romanova', email: 'natasha.rom@proton.me', phone: '+44 7800 112233', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 11, registeredAt: '2026-09-27T17:50:00Z' },
-  { id: 'usr_c011', name: 'David Miller', email: 'david.miller@manchester.ac.uk', phone: '+44 7900 445566', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-01T12:00:00Z' },
-  { id: 'usr_c012', name: 'Emma Watson', email: 'emma.w.guidance@gmail.com', phone: '+44 7711 889900', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-03T14:15:00Z' },
-  { id: 'usr_c013', name: 'Oliver Smith', email: 'oliver.smith.uk@outlook.com', phone: '+44 7733 445566', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-05T19:30:00Z' },
-  { id: 'usr_c014', name: 'Isabella Jones', email: 'isabella.j.mystic@gmail.com', phone: '+1 646 555 0199', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-07T10:45:00Z' },
-  { id: 'usr_c015', name: 'Lucas Brown', email: 'lucas.brown.tarot@yahoo.com', phone: '+1 312 555 0124', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-09T16:00:00Z' },
-  { id: 'usr_c016', name: 'Mia Davis', email: 'mia.davis.celestial@gmail.com', phone: '+44 7855 667788', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-11T11:20:00Z' },
-  { id: 'usr_c017', name: 'Noah Wilson', email: 'noah.wilson@toronto.ca', phone: '+1 416 555 0177', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-10-13T13:50:00Z' },
-  { id: 'usr_c018', name: 'Ava Taylor', email: 'ava.taylor.guidance@gmail.com', phone: '+1 206 555 0165', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-10-15T09:10:00Z' },
-  { id: 'usr_c019', name: 'Ethan Anderson', email: 'ethan.anderson@sydney.au', phone: '+61 400 123 456', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-16T15:40:00Z' },
-  { id: 'usr_c020', name: 'Harper Thomas', email: 'harper.thomas@austin.io', phone: '+1 512 555 0132', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-17T18:25:00Z' },
-  { id: 'usr_c021', name: 'James Jackson', email: 'james.jackson@birmingham.uk', phone: '+44 7788 990011', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-18T12:15:00Z' },
-  { id: 'usr_c022', name: 'Evelyn White', email: 'evelyn.white.tarot@gmail.com', phone: '+1 702 555 0144', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 9, registeredAt: '2026-10-19T14:35:00Z' },
-  { id: 'usr_c023', name: 'Alexander Harris', email: 'alex.harris.seeker@gmail.com', phone: '+44 7922 334411', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-20T17:05:00Z' },
-  { id: 'usr_c024', name: 'Abigail Martin', email: 'abigail.martin@leeds.uk', phone: '+44 7744 556677', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-21T08:50:00Z' },
-  { id: 'usr_c025', name: 'Henry Thompson', email: 'henry.thompson@melbourne.au', phone: '+61 411 234 567', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 3, registeredAt: '2026-10-22T11:40:00Z' },
-  { id: 'usr_c026', name: 'Emily Garcia', email: 'emily.garcia.stars@gmail.com', phone: '+1 619 555 0188', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-23T13:20:00Z' },
-  { id: 'usr_c027', name: 'Sebastian Martinez', email: 'sebastian.m@madrid.es', phone: '+34 600 123 456', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-24T16:10:00Z' },
-  { id: 'usr_c028', name: 'Elizabeth Robinson', email: 'elizabeth.robinson@bristol.uk', phone: '+44 7766 112233', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 7, registeredAt: '2026-10-24T19:45:00Z' },
-  { id: 'usr_c029', name: 'Jack Clark', email: 'jack.clark.vedic@gmail.com', phone: '+1 408 555 0155', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-25T10:30:00Z' },
-  { id: 'usr_c030', name: 'Sofia Rodriguez', email: 'sofia.rodriguez@miami.edu', phone: '+1 786 555 0122', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 10, registeredAt: '2026-10-25T14:15:00Z' },
-  { id: 'usr_c031', name: 'Owen Lewis', email: 'owen.lewis.uk@gmail.com', phone: '+44 7799 001122', accountStatus: 'free_tier', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 2, registeredAt: '2026-10-26T09:00:00Z' },
-  { id: 'usr_c032', name: 'Avery Lee', email: 'avery.lee.cosmos@gmail.com', phone: '+1 206 555 0191', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-26T12:45:00Z' },
-  { id: 'usr_c033', name: 'Jackson Walker', email: 'jackson.walker@glasgow.uk', phone: '+44 7711 223344', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 4, registeredAt: '2026-10-27T15:30:00Z' },
-  { id: 'usr_c034', name: 'Scarlett Hall', email: 'scarlett.hall.tarot@outlook.com', phone: '+1 415 555 0139', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 8, registeredAt: '2026-10-27T18:10:00Z' },
-  { id: 'usr_c035', name: 'Samuel Allen', email: 'samuel.allen@chicago.io', phone: '+1 312 555 0187', accountStatus: 'free_tier', isFirstTimeUser: true, freeMinutesUsed: false, totalConsultations: 1, registeredAt: '2026-10-28T11:20:00Z' },
-  { id: 'usr_c036', name: 'Grace Young', email: 'grace.young.guidance@gmail.com', phone: '+44 7733 889900', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 6, registeredAt: '2026-10-28T14:50:00Z' },
-  { id: 'usr_c037', name: 'Benjamin Hernandez', email: 'benjamin.h@losangeles.ca', phone: '+1 213 555 0111', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 5, registeredAt: '2026-10-29T09:15:00Z' },
-  { id: 'usr_c038', name: 'Ankush Seeker', email: 'bankush014@gmail.com', phone: '+91 98765 43210', accountStatus: 'active', isFirstTimeUser: false, freeMinutesUsed: true, totalConsultations: 14, registeredAt: '2026-10-29T11:00:00Z' }
-];
-
-export function getAllKnownClients(): ClientRecord[] {
-  const clientMap = new Map<string, ClientRecord>();
-
-  // 1. Seed base platform clients
-  DEFAULT_PLATFORM_CLIENTS.forEach(c => clientMap.set(c.id, { ...c }));
-
-  // 2. Read accounts registered on this website via localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      const rawAccounts = localStorage.getItem('lumysic_accounts_v1');
-      if (rawAccounts) {
-        const accounts = JSON.parse(rawAccounts);
-        Object.values(accounts).forEach((acc: any) => {
-          if (acc && acc.email) {
-            const accId = acc.id || `usr_${acc.email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-            clientMap.set(accId, {
-              id: accId,
-              name: acc.name || acc.email.split('@')[0],
-              email: acc.email,
-              phone: acc.phone || '+44 7700 900142',
-              accountStatus: 'active',
-              isFirstTimeUser: false,
-              freeMinutesUsed: true,
-              totalConsultations: 2,
-              registeredAt: acc.createdAt || new Date().toISOString()
-            });
-          }
-        });
-      }
-
-      // 3. Include current logged in seeker if found in localStorage
-      const userEmail = localStorage.getItem('lumysic_user_email') || localStorage.getItem('astral_customer_email');
-      const userName = localStorage.getItem('lumysic_user_name') || localStorage.getItem('astral_customer_name');
-      const userPhone = localStorage.getItem('lumysic_user_phone') || localStorage.getItem('astral_customer_phone');
-      if (userEmail && userEmail.includes('@')) {
-        const cleanEmail = userEmail.toLowerCase().trim();
-        const existing = Array.from(clientMap.values()).find(c => c.email.toLowerCase() === cleanEmail);
-        if (existing) {
-          if (userName) existing.name = userName;
-          if (userPhone) existing.phone = userPhone;
-        } else {
-          const newId = 'usr_' + (typeof btoa !== 'undefined' ? btoa(cleanEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) : Date.now().toString());
-          clientMap.set(newId, {
-            id: newId,
-            name: userName || cleanEmail.split('@')[0],
-            email: cleanEmail,
-            phone: userPhone || '+44 7700 900142',
-            accountStatus: 'active',
-            isFirstTimeUser: false,
-            freeMinutesUsed: true,
-            totalConsultations: 1,
-            registeredAt: new Date().toISOString()
-          });
-        }
-      }
-    } catch {}
-  }
-
-  return Array.from(clientMap.values());
-}
-
-const SPECIALIZATION_OPTIONS = [
-  'Vedic Astrology',
-  'Tarot',
-  'Psychic & Intuitive',
-  'Western Astrology',
-  'Mediumship',
-  'Spiritual Guidance'
-];
-
-const DEFAULT_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80'
-];
-
 export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
   onBackToSite,
   initialTab = 'overview',
-  currentAdminProfile,
-  onOpenAstrologerDashboard
+  currentAdminProfile
 }) => {
-  // Navigation: Only 5 core tabs + Logout
-  const [activeTab, setActiveTab] = useState<'overview' | 'astrologers' | 'chats' | 'clients' | 'settings'>(
-    (initialTab as any) || 'overview'
-  );
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Core Data initialized immediately with live data so 0 Online / 0 Clients NEVER occurs
-  const [readers, setReaders] = useState<Reader[]>(() => {
-    return READERS.map(r => ({
-      ...r,
-      isOnline: r.isOnline !== undefined ? r.isOnline : true,
-      status: r.status || (r.isOnline ? 'online' : 'online')
-    }));
+  // Navigation tabs: 'overview' | 'inbox' | 'chats' | 'astrologers'
+  const [activeTab, setActiveTab] = useState<'overview' | 'inbox' | 'chats' | 'astrologers'>(() => {
+    if (initialTab === 'chats' || initialTab === 'inbox') return 'inbox';
+    if (initialTab === 'astrologers') return 'astrologers';
+    return 'overview';
   });
+
+  // Master State
   const [sessions, setSessions] = useState<ConsultationSession[]>([]);
-  const [clients, setClients] = useState<ClientRecord[]>(() => getAllKnownClients());
-  const [autoAssignSettings, setAutoAssignSettings] = useState<AutoAssignSettings>({
-    enabled: true,
-    maxChatsPerAstrologer: 3,
-    idlePriority: true,
-    escalationTimeoutMinutes: 2,
-    specializationMatching: true,
-    onlineOnly: true
-  });
-
-  // KPIs for overview - initialized immediately with baseline numbers
-  const [kpis, setKpis] = useState(() => {
-    const known = getAllKnownClients();
-    return {
-      totalAstrologers: READERS.length,
-      onlineAstrologers: READERS.length,
-      totalClients: known.length,
-      activeChats: 0,
-      pendingChats: 0
-    };
-  });
-
-  // UI States
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [readers, setReaders] = useState<Reader[]>(READERS);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
-  // Live Timer Tick for Pending Chats wait-time
-  const [nowTimestamp, setNowTimestamp] = useState(Date.now());
+  // Filters & Search
+  const [inboxSearch, setInboxSearch] = useState<string>('');
+  const [inboxStatusFilter, setInboxStatusFilter] = useState<'all' | 'waiting' | 'active' | 'completed'>('all');
+  const [inboxAstrologerFilter, setInboxAstrologerFilter] = useState<string>('all');
+  
+  // Chat Reply State
+  const [replyText, setReplyText] = useState<string>('');
+  const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Reassign Modal State
+  const [reassignModalOpen, setReassignModalOpen] = useState<boolean>(false);
+  const [sessionToReassign, setSessionToReassign] = useState<ConsultationSession | null>(null);
+  const [targetReaderId, setTargetReaderId] = useState<string>('');
+  const [reassignNote, setReassignNote] = useState<string>('');
+  const [isReassigning, setIsReassigning] = useState<boolean>(false);
+
+  // Update clock every second for live timers
   useEffect(() => {
     const timer = setInterval(() => setNowTimestamp(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -258,9 +101,17 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // =========================================================================
-  // DATA FETCHING & AUTHENTICATED REQUESTS
-  // =========================================================================
+  const playNotificationSound = () => {
+    if (!soundEnabled) return;
+    try {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      }
+    } catch {}
+  };
+
+  // Helper: Get Admin Request Headers
   const getAdminHeaders = async (): Promise<Record<string, string>> => {
     let token = '';
     try {
@@ -269,7 +120,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
       }
     } catch {}
     const localToken = typeof window !== 'undefined' ? (localStorage.getItem('lumsic_admin_token') || sessionStorage.getItem('lumsic_admin_token') || '') : '';
-    const email = currentAdminProfile?.email || auth.currentUser?.email || (typeof window !== 'undefined' ? (localStorage.getItem('lumsic_user_email') || 'bankush014@gmail.com') : 'bankush014@gmail.com');
+    const email = currentAdminProfile?.email || auth.currentUser?.email || (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_email') || 'bankush014@gmail.com') : 'bankush014@gmail.com');
     const uid = currentAdminProfile?.uid || auth.currentUser?.uid || 'super_admin';
     return {
       'Content-Type': 'application/json',
@@ -289,184 +140,141 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     return fetch(url, { ...init, headers: mergedHeaders });
   };
 
-  const safeJson = async (res: Response | null): Promise<any> => {
-    if (!res || !res.ok) return null;
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) return null;
+  // =========================================================================
+  // MASTER DATA FETCHING: Server Inbox API + Local Fallback
+  // =========================================================================
+  const fetchData = async (showIndicator = false) => {
+    if (showIndicator) setIsRefreshing(true);
     try {
-      return await res.json();
-    } catch {
-      return null;
-    }
-  };
+      // 1. Fetch readers
+      const readersRes = await adminFetch('/api/readers').catch(() => null);
+      if (readersRes && readersRes.ok) {
+        const data = await readersRes.json().catch(() => null);
+        if (data?.readers && Array.isArray(data.readers) && data.readers.length > 0) {
+          const serverMap = new Map<string, Reader>(data.readers.map((r: Reader) => [r.id, r]));
+          const merged = READERS.map(coreReader => {
+            const remote = serverMap.get(coreReader.id);
+            return {
+              ...coreReader,
+              ...(remote || {}),
+              isOnline: remote ? Boolean(remote.isOnline) : coreReader.isOnline,
+              status: remote ? (remote.status || (remote.isOnline ? 'online' : 'offline')) : 'online'
+            };
+          });
+          const custom = data.readers.filter((r: Reader) => !READERS.some(cr => cr.id === r.id));
+          setReaders([...merged, ...custom]);
+        }
+      }
 
-  const fetchData = async (showRefreshIndicator = false) => {
-    if (showRefreshIndicator) setIsRefreshing(true);
-    try {
-      const [readersRes, sessionsRes, clientsRes, overviewRes, n8nRes] = await Promise.all([
-        adminFetch('/api/readers').catch(() => null),
-        adminFetch('/api/astroboard/sessions?readerId=psychic-tamara&isAdmin=true').then(async r => {
+      // 2. Fetch central admin inbox (All conversations across ALL readers & workflows)
+      let serverSessions: ConsultationSession[] = [];
+      const inboxRes = await adminFetch('/api/admin/inbox?isAdmin=true')
+        .then(async r => {
           if (!r || !r.ok) return adminFetch('/api/admin/sessions?isAdmin=true');
           return r;
-        }).catch(() => null),
-        adminFetch('/api/admin/clients').catch(() => null),
-        adminFetch('/api/admin/overview').catch(() => null),
-        adminFetch('/api/admin/n8n/config').catch(() => null)
-      ]);
+        })
+        .catch(() => null);
 
-      const [readersData, sessionsData, clientsData, overviewData, n8nData] = await Promise.all([
-        safeJson(readersRes),
-        safeJson(sessionsRes),
-        safeJson(clientsRes),
-        safeJson(overviewRes),
-        safeJson(n8nRes)
-      ]);
-
-      if (readersData?.readers && Array.isArray(readersData.readers) && readersData.readers.length > 0) {
-        // Merge backend readers with core READERS ensuring all astrologers exist
-        const serverMap = new Map<string, Reader>(readersData.readers.map((r: Reader) => [r.id, r]));
-        const mergedReaders = READERS.map(coreReader => {
-          const remote = serverMap.get(coreReader.id);
-          return {
-            ...coreReader,
-            ...(remote || {}),
-            isOnline: remote ? Boolean(remote.isOnline) : true,
-            status: remote ? (remote.status || (remote.isOnline ? 'online' : 'offline')) : 'online'
-          };
-        });
-        const customReaders = readersData.readers.filter((r: Reader) => !READERS.some(cr => cr.id === r.id));
-        setReaders([...mergedReaders, ...customReaders]);
-      } else {
-        // Keep baseline readers
-        setReaders(prev => prev.length > 0 ? prev : READERS);
+      if (inboxRes && inboxRes.ok) {
+        const inboxData = await inboxRes.json().catch(() => null);
+        if (inboxData?.sessions && Array.isArray(inboxData.sessions)) {
+          serverSessions = inboxData.sessions;
+        }
       }
 
-      if (n8nData?.n8nConfig) {
-        setN8nConfig(prev => ({
-          ...prev,
-          ...n8nData.n8nConfig
-        }));
-      }
-
-      // Resilient session merging: combine server sessions with local storage sessions
+      // 3. Resilient merge: Combine server sessions with local storage sessions
       const localStored = getStoredSessions();
-      const serverSessions = (sessionsData?.sessions && Array.isArray(sessionsData.sessions)) ? sessionsData.sessions : [];
       const sessionMap = new Map<string, ConsultationSession>();
       localStored.forEach(s => sessionMap.set(s.id, s));
-      serverSessions.forEach((s: ConsultationSession) => sessionMap.set(s.id, { ...sessionMap.get(s.id), ...s }));
-      setSessions(Array.from(sessionMap.values()));
+      serverSessions.forEach(s => sessionMap.set(s.id, { ...(sessionMap.get(s.id) || {}), ...s }));
 
-      // Merge backend clients with local registered seekers
-      const localKnown = getAllKnownClients();
-      const clientMap = new Map<string, ClientRecord>();
+      const mergedList = Array.from(sessionMap.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setSessions(mergedList);
 
-      // 1. Add known local & seed clients
-      localKnown.forEach(c => clientMap.set(c.id || c.email, c));
-
-      // 2. Add server clients
-      if (clientsData?.clients && Array.isArray(clientsData.clients)) {
-        clientsData.clients.forEach((c: ClientRecord) => {
-          clientMap.set(c.id || c.email, {
-            ...c,
-            accountStatus: c.accountStatus || 'active',
-            totalConsultations: c.totalConsultations || 1
-          });
-        });
-      }
-
-      const mergedClients = Array.from(clientMap.values());
-      setClients(mergedClients);
-
-      // Background sync local clients to server db if needed
-      if (localKnown.length > 0) {
-        adminFetch('/api/admin/clients/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clients: localKnown })
-        }).catch(() => {});
-      }
-
-      if (overviewData) {
-        if (overviewData.kpis) {
-          setKpis({
-            totalAstrologers: overviewData.kpis.totalAstrologers || readers.length,
-            onlineAstrologers: overviewData.kpis.onlineAstrologers || readers.filter(r => r.isOnline).length,
-            totalClients: mergedClients.length,
-            activeChats: overviewData.kpis.activeChats || 0,
-            pendingChats: overviewData.kpis.pendingChats || 0
-          });
-        }
-        if (overviewData.autoAssignSettings) {
-          setAutoAssignSettings(overviewData.autoAssignSettings);
-        }
+      // Auto-select first session if none selected
+      if (!selectedSessionId && mergedList.length > 0) {
+        setSelectedSessionId(mergedList[0].id);
       }
     } catch (err) {
-      console.warn('Graceful sync of admin data:', err);
+      console.warn('Admin fetch data notice:', err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   };
 
+  // =========================================================================
+  // REAL-TIME SYNCHRONIZATION: Firestore onSnapshot + SSE + BroadcastChannel
+  // =========================================================================
   useEffect(() => {
     fetchData();
+
+    // 1. Heartbeat Polling (every 4 seconds) to guarantee zero lost chats
     const pollInterval = setInterval(() => {
       fetchData();
-    }, 5000);
+    }, 4000);
 
-    // Cross-tab real-time session synchronization
-    let bc: BroadcastChannel | null = null;
-    const handleIncomingSessionEvent = (event: any) => {
-      try {
-        const { type, payload } = event.data || event.detail || {};
-        if (type === 'new_session' && payload) {
+    // 2. Real-time Firestore onSnapshot (Sub-100ms sync across all devices & domains)
+    let unsubFirestore: (() => void) | null = null;
+    try {
+      unsubFirestore = onSnapshot(collection(db, 'sessions'), (snapshot) => {
+        const remoteSessions: ConsultationSession[] = [];
+        let hasNewSession = false;
+
+        snapshot.forEach(docSnap => {
+          const s = docSnap.data() as ConsultationSession;
+          if (s && s.id) {
+            remoteSessions.push(s);
+          }
+        });
+
+        if (remoteSessions.length > 0) {
           setSessions(prev => {
-            const exists = prev.some(s => s.id === payload.id);
-            if (exists) return prev.map(s => s.id === payload.id ? { ...s, ...payload } : s);
-            return [payload, ...prev];
-          });
-        } else if (type === 'session_accepted' && payload) {
-          setSessions(prev => prev.map(s => s.id === payload.id ? { ...s, ...payload, status: 'active' } : s));
-        } else if (type === 'message_received' && payload) {
-          setSessions(prev => prev.map(s => {
-            if (s.id === payload.sessionId) {
-              const msgs = s.messages || [];
-              if (!msgs.some(m => m.id === payload.id)) {
-                return { ...s, messages: [...msgs, payload] };
-              }
-            }
-            return s;
-          }));
-          setViewTranscriptSession(curr => {
-            if (curr && curr.id === payload.sessionId) {
-              const msgs = curr.messages || [];
-              if (!msgs.some(m => m.id === payload.id)) {
-                return { ...curr, messages: [...msgs, payload] };
-              }
-            }
-            return curr;
-          });
-        } else if (type === 'session_ended' && payload) {
-          setSessions(prev => prev.map(s => s.id === payload.id ? { ...s, status: 'completed' } : s));
-        }
-      } catch (err) {
-        console.warn('Admin Broadcast event notice:', err);
-      }
-    };
+            const map = new Map<string, ConsultationSession>();
+            prev.forEach(s => map.set(s.id, s));
 
+            remoteSessions.forEach(s => {
+              const existing = map.get(s.id);
+              if (!existing) {
+                hasNewSession = true;
+              }
+              map.set(s.id, { ...(existing || {}), ...s });
+            });
+
+            return Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          });
+
+          if (hasNewSession) {
+            playNotificationSound();
+            showToast('🔔 New customer conversation landed in Admin Inbox!', 'info');
+          }
+        }
+      }, (err) => {
+        console.warn('Firestore onSnapshot notice:', err);
+      });
+    } catch (err) {
+      console.warn('Firestore subscription init notice:', err);
+    }
+
+    // 3. Real-time SSE Stream (/api/events)
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/events?isAdmin=true&readerId=psychic-tamara');
       es.addEventListener('new_session', (e: MessageEvent) => {
         try {
-          const session = JSON.parse(e.data);
-          if (session && session.id) {
+          const newSess = JSON.parse(e.data);
+          if (newSess && newSess.id) {
+            playNotificationSound();
+            showToast(`🔔 New chat from ${newSess.customerName || 'Customer'}!`, 'info');
             setSessions(prev => {
-              const exists = prev.some(s => s.id === session.id);
-              if (exists) return prev.map(s => s.id === session.id ? { ...s, ...session } : s);
-              return [session, ...prev];
+              const exists = prev.some(s => s.id === newSess.id);
+              if (exists) return prev.map(s => s.id === newSess.id ? { ...s, ...newSess } : s);
+              return [newSess, ...prev];
             });
-            showToast(`🔔 New consultation request from ${session.customerName || 'Seeker'}!`, 'info');
             fetchData();
           }
         } catch {}
@@ -474,3653 +282,1423 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
       es.addEventListener('message_received', (e: MessageEvent) => {
         try {
-          const message = JSON.parse(e.data);
-          if (message && message.sessionId) {
+          const data = JSON.parse(e.data);
+          const msg: ChatMessage = data?.message;
+          const sessId = data?.sessionId || msg?.sessionId;
+          if (sessId && msg) {
             setSessions(prev => prev.map(s => {
-              if (s.id === message.sessionId) {
+              if (s.id === sessId) {
                 const msgs = s.messages || [];
-                if (!msgs.some(m => m.id === message.id)) {
-                  return { ...s, messages: [...msgs, message], lastMessageText: message.text, lastMessageAt: message.timestamp };
+                if (!msgs.some(m => m.id === msg.id)) {
+                  return { 
+                    ...s, 
+                    messages: [...msgs, msg], 
+                    lastMessageText: msg.text, 
+                    lastMessageAt: msg.timestamp 
+                  };
                 }
               }
               return s;
             }));
-            setViewTranscriptSession(curr => {
-              if (curr && curr.id === message.sessionId) {
-                const msgs = curr.messages || [];
-                if (!msgs.some(m => m.id === message.id)) {
-                  return { ...curr, messages: [...msgs, message] };
-                }
-              }
-              return curr;
-            });
           }
         } catch {}
       });
 
-      es.addEventListener('session_accepted', (e: MessageEvent) => {
-        try {
-          const { session } = JSON.parse(e.data);
-          if (session && session.id) {
-            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, ...session, status: 'active' } : s));
-          }
-        } catch {}
-      });
-
-      es.addEventListener('session_completed', (e: MessageEvent) => {
-        try {
-          const { session } = JSON.parse(e.data);
-          if (session && session.id) {
-            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s));
-          }
-        } catch {}
-      });
-
-      es.addEventListener('session_ended', (e: MessageEvent) => {
-        try {
-          const { session } = JSON.parse(e.data);
-          if (session && session.id) {
-            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s));
-          }
-        } catch {}
-      });
+      es.addEventListener('session_updated', () => fetchData());
+      es.addEventListener('session_accepted', () => fetchData());
+      es.addEventListener('session_completed', () => fetchData());
     } catch {}
 
+    // 4. Cross-tab BroadcastChannel
+    let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
-        bc.onmessage = handleIncomingSessionEvent;
+        bc.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === 'new_session' && payload) {
+            playNotificationSound();
+            setSessions(prev => {
+              const exists = prev.some(s => s.id === payload.id);
+              if (exists) return prev.map(s => s.id === payload.id ? { ...s, ...payload } : s);
+              return [payload, ...prev];
+            });
+          }
+        };
       }
     } catch {}
-
-    const onCustomEvent = (e: Event) => handleIncomingSessionEvent(e as CustomEvent);
-    window.addEventListener('lumsic_session_event', onCustomEvent);
-
-    // Real-time Firestore synchronization: Any consultation from any domain (lumsic.online, mobile, preview)
-    // lands in the Admin Dashboard immediately!
-    let unsubFirestore: (() => void) | null = null;
-    try {
-      unsubFirestore = onSnapshot(collection(db, 'sessions'), (snapshot) => {
-        const remoteSessions: ConsultationSession[] = [];
-        snapshot.forEach(docSnap => {
-          const s = docSnap.data() as ConsultationSession;
-          if (s && s.id) remoteSessions.push(s);
-        });
-        if (remoteSessions.length > 0) {
-          setSessions(prev => {
-            const map = new Map<string, ConsultationSession>();
-            prev.forEach(s => map.set(s.id, s));
-            remoteSessions.forEach(s => map.set(s.id, { ...(map.get(s.id) || {}), ...s }));
-            return Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          });
-        }
-      }, (err) => {
-        console.warn('Firestore sessions real-time listener notice:', err);
-      });
-    } catch (err) {
-      console.warn('Firestore onSnapshot init notice:', err);
-    }
 
     return () => {
       clearInterval(pollInterval);
-      if (bc) bc.close();
-      if (es) es.close();
       if (unsubFirestore) unsubFirestore();
-      window.removeEventListener('lumsic_session_event', onCustomEvent);
+      if (es) es.close();
+      if (bc) bc.close();
     };
   }, []);
 
-  // Update dynamic KPIs from state
-  const totalAstrologersCount = readers.length;
-  const onlineAstrologersCount = readers.filter(r => r.isOnline).length;
-  const activeChatsList = sessions.filter(s => s.status === 'active');
-  const pendingChatsList = sessions.filter(s => s.status === 'waiting');
-  const liveChatsList = [...pendingChatsList, ...activeChatsList];
-  const totalClientsCount = clients.length;
+  // Auto-scroll chat history on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sessions, selectedSessionId]);
 
-  // =========================================================================
-  // ASTROLOGER MANAGEMENT STATE & HANDLERS
-  // =========================================================================
-  const [astroSearch, setAstroSearch] = useState('');
-  const [astroStatusFilter, setAstroStatusFilter] = useState<'all' | 'online' | 'offline' | 'inactive'>('all');
-  const [astroSpecialtyFilter, setAstroSpecialtyFilter] = useState<string>('all');
+  // KPIs Computation
+  const stats = useMemo(() => {
+    const total = sessions.length;
+    const active = sessions.filter(s => s.status === 'active').length;
+    const pending = sessions.filter(s => s.status === 'waiting').length;
+    const completed = sessions.filter(s => s.status === 'completed').length;
+    const onlineAstrologers = readers.filter(r => r.isOnline).length;
+    const uniqueCustomers = new Set(sessions.map(s => s.customerId || s.customerName)).size;
 
-  // Modals
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingReader, setEditingReader] = useState<Reader | null>(null);
-  const [deleteConfirmReader, setDeleteConfirmReader] = useState<Reader | null>(null);
-  const [passwordResetReader, setPasswordResetReader] = useState<Reader | null>(null);
-  const [newPasswordValue, setNewPasswordValue] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
+    return { total, active, pending, completed, onlineAstrologers, uniqueCustomers };
+  }, [sessions, readers]);
 
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Selected Conversation Object
+  const selectedSession = useMemo(() => {
+    return sessions.find(s => s.id === selectedSessionId) || sessions[0] || null;
+  }, [sessions, selectedSessionId]);
 
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image file (JPG, PNG, WEBP, or GIF)', 'error');
-      return;
-    }
-
-    if (file.size > 8 * 1024 * 1024) {
-      showToast('Image file size must be less than 8MB', 'error');
-      return;
-    }
-
-    setUploadingImage(true);
-    try {
-      const fileReader = new FileReader();
-      fileReader.onload = async () => {
-        const dataUrl = fileReader.result as string;
-        try {
-          const res = await adminFetch('/api/upload-image', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dataUrl, filename: file.name })
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Failed to upload image');
-          const finalUrl = data.url || dataUrl;
-          setFormData(prev => ({ ...prev, avatar: finalUrl }));
-          showToast('Image uploaded successfully! Real-time preview updated.');
-        } catch (uploadErr: any) {
-          setFormData(prev => ({ ...prev, avatar: dataUrl }));
-          showToast('Image loaded successfully!');
-        } finally {
-          setUploadingImage(false);
-        }
-      };
-      fileReader.readAsDataURL(file);
-    } catch (err: any) {
-      showToast(err.message || 'Error processing image', 'error');
-      setUploadingImage(false);
-    }
-  };
-
-  // n8n Workflow Automation State
-  const [workflowModalReader, setWorkflowModalReader] = useState<Reader | null>(null);
-  const [workflowFormData, setWorkflowFormData] = useState({
-    n8nWorkflowId: '',
-    n8nWebhookUrl: '',
-    n8nWorkflowName: '',
-    isWorkflowEnabled: true
-  });
-  const [testMessageInput, setTestMessageInput] = useState('');
-  const [testWorkflowLoading, setTestWorkflowLoading] = useState(false);
-  const [testWorkflowResult, setTestWorkflowResult] = useState<any>(null);
-  const [n8nConfig, setN8nConfig] = useState({
-    baseUrl: 'https://n8n.webhook.internal',
-    apiKey: '',
-    defaultWebhookPath: '/webhook/astrologer-chat'
-  });
-
-  // Form State for Create/Edit
-  const [formData, setFormData] = useState({
-    name: '',
-    astroId: '',
-    email: '',
-    phone: '',
-    specialization: 'Vedic Astrology',
-    experienceYears: 8,
-    ratePerMinute: 1.75,
-    videoRatePerMinute: 2.50,
-    avatar: DEFAULT_AVATARS[0],
-    bio: '',
-    isChatEnabled: true,
-    isVideoEnabled: true,
-    password: '',
-    // n8n mapping
-    isWorkflowEnabled: true,
-    n8nWorkflowId: '',
-    n8nWebhookUrl: '',
-    n8nWorkflowName: ''
-  });
-
-  const openCreateModal = () => {
-    // Generate recommended ID
-    let nextNum = 10000 + readers.length + 1;
-    while (readers.some(r => r.astroId === `LYS-${nextNum}`)) {
-      nextNum++;
-    }
-    const defaultAstroId = `LYS-${nextNum}`;
-    setFormData({
-      name: '',
-      astroId: defaultAstroId,
-      email: '',
-      phone: '',
-      specialization: 'Vedic Astrology',
-      experienceYears: 8,
-      ratePerMinute: 1.75,
-      videoRatePerMinute: 2.50,
-      avatar: DEFAULT_AVATARS[Math.floor(Math.random() * DEFAULT_AVATARS.length)],
-      bio: 'Experienced intuitive astrologer committed to offering clear, compassionate guidance.',
-      isChatEnabled: true,
-      isVideoEnabled: true,
-      password: '',
-      isWorkflowEnabled: true,
-      n8nWorkflowId: `wf_${defaultAstroId}`,
-      n8nWebhookUrl: '',
-      n8nWorkflowName: `Consultation Flow - ${defaultAstroId}`
+  // Filtered Conversations for Inbox List
+  const filteredInboxSessions = useMemo(() => {
+    return sessions.filter(s => {
+      // 1. Status Filter
+      if (inboxStatusFilter !== 'all' && (s.status || '').toLowerCase() !== inboxStatusFilter) {
+        return false;
+      }
+      // 2. Astrologer Filter
+      if (inboxAstrologerFilter !== 'all') {
+        const matchesReader = 
+          s.assignedReaderId === inboxAstrologerFilter ||
+          s.requestedReaderId === inboxAstrologerFilter ||
+          s.assignedAstroId === inboxAstrologerFilter ||
+          s.requestedAstroId === inboxAstrologerFilter;
+        if (!matchesReader) return false;
+      }
+      // 3. Search Query
+      if (inboxSearch.trim()) {
+        const q = inboxSearch.toLowerCase().trim();
+        const matches = 
+          (s.customerName && s.customerName.toLowerCase().includes(q)) ||
+          (s.customerId && s.customerId.toLowerCase().includes(q)) ||
+          (s.id && s.id.toLowerCase().includes(q)) ||
+          (s.assignedReaderName && s.assignedReaderName.toLowerCase().includes(q)) ||
+          (s.requestedReaderName && s.requestedReaderName.toLowerCase().includes(q)) ||
+          (s.topic && s.topic.toLowerCase().includes(q)) ||
+          (s.readingType && s.readingType.toLowerCase().includes(q)) ||
+          (s.lastMessageText && s.lastMessageText.toLowerCase().includes(q));
+        if (!matches) return false;
+      }
+      return true;
     });
-    setCreateModalOpen(true);
+  }, [sessions, inboxStatusFilter, inboxAstrologerFilter, inboxSearch]);
+
+  // Helper: Elapsed / Duration text
+  const getElapsedText = (createdAt: string) => {
+    if (!createdAt) return '0m';
+    const elapsedSec = Math.max(0, Math.floor((nowTimestamp - new Date(createdAt).getTime()) / 1000));
+    const mins = Math.floor(elapsedSec / 60);
+    const secs = elapsedSec % 60;
+    if (mins >= 60) {
+      const hours = Math.floor(mins / 60);
+      return `${hours}h ${mins % 60}m`;
+    }
+    return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  const openEditModal = (reader: Reader) => {
-    setEditingReader(reader);
-    const resolvedAstroId = reader.astroId || reader.id;
-    setFormData({
-      name: reader.name || '',
-      astroId: resolvedAstroId,
-      email: reader.email || '',
-      phone: reader.phone || '',
-      specialization: reader.specialties?.[0] || reader.specialities?.[0] || 'Vedic Astrology',
-      experienceYears: reader.experienceYears || reader.experience_years || 5,
-      ratePerMinute: reader.ratePerMinute || 1.50,
-      videoRatePerMinute: reader.videoRatePerMinute || 2.50,
-      avatar: reader.avatar || reader.image_url || DEFAULT_AVATARS[0],
-      bio: reader.bio || '',
-      isChatEnabled: reader.isChatEnabled !== false,
-      isVideoEnabled: reader.isVideoEnabled !== false,
-      password: '',
-      isWorkflowEnabled: reader.isWorkflowEnabled !== false,
-      n8nWorkflowId: reader.n8nWorkflowId || `wf_${resolvedAstroId}`,
-      n8nWebhookUrl: reader.n8nWebhookUrl || '',
-      n8nWorkflowName: reader.n8nWorkflowName || `Consultation Flow - ${reader.name || resolvedAstroId}`
-    });
-    setEditModalOpen(true);
-  };
-
-  const handleCreateAstrologer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name.trim() || !formData.email.trim() || !formData.astroId.trim()) {
-      showToast('Please fill in Name, Email, and Astrologer ID', 'error');
-      return;
-    }
-
-    // Check duplicate ID client-side
-    const isDup = readers.some(
-      r => (r.astroId && r.astroId.toLowerCase() === formData.astroId.trim().toLowerCase()) ||
-           r.id.toLowerCase() === formData.astroId.trim().toLowerCase()
-    );
-    if (isDup) {
-      showToast(`Astrologer ID "${formData.astroId.trim()}" already exists. Please choose a unique ID.`, 'error');
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      const targetAstroId = formData.astroId.trim();
-      const res = await adminFetch('/api/admin/astrologers/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          astroId: targetAstroId,
-          n8nWorkflowId: formData.n8nWorkflowId.trim() || `wf_${targetAstroId}`,
-          n8nWebhookUrl: formData.n8nWebhookUrl.trim(),
-          n8nWorkflowName: formData.n8nWorkflowName.trim() || `Flow - ${targetAstroId}`,
-          isWorkflowEnabled: formData.isWorkflowEnabled !== false,
-          adminName: currentAdminProfile?.email || 'Super Admin'
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create astrologer');
-      }
-      showToast(`Astrologer ${data.reader.name} (${data.reader.astroId}) created with n8n workflow ${data.reader.n8nWorkflowId || 'mapped'}!`);
-      setCreateModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Error creating astrologer', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateAstrologer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingReader) return;
-
-    if (!formData.name.trim() || !formData.astroId.trim()) {
-      showToast('Name and Astrologer ID are required', 'error');
-      return;
-    }
-
-    // Duplicate ID check against other readers
-    const isDup = readers.some(
-      r => r.id !== editingReader.id &&
-           r.astroId &&
-           r.astroId.toLowerCase() === formData.astroId.trim().toLowerCase()
-    );
-    if (isDup) {
-      showToast(`Astrologer ID "${formData.astroId.trim()}" is already assigned to another astrologer.`, 'error');
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      const res = await adminFetch(`/api/readers/${editingReader.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          astroId: formData.astroId.trim(),
-          email: formData.email.trim(),
-          phone: formData.phone.trim(),
-          specialties: [formData.specialization],
-          specialities: [formData.specialization],
-          experienceYears: Number(formData.experienceYears),
-          experience_years: Number(formData.experienceYears),
-          ratePerMinute: Number(formData.ratePerMinute),
-          videoRatePerMinute: Number(formData.videoRatePerMinute),
-          avatar: formData.avatar,
-          image_url: formData.avatar,
-          bio: formData.bio.trim(),
-          isChatEnabled: formData.isChatEnabled,
-          isVideoEnabled: formData.isVideoEnabled,
-          isCallEnabled: formData.isVideoEnabled,
-          isWorkflowEnabled: formData.isWorkflowEnabled,
-          n8nWorkflowId: formData.n8nWorkflowId.trim() || `wf_${formData.astroId.trim()}`,
-          n8nWebhookUrl: formData.n8nWebhookUrl.trim(),
-          n8nWorkflowName: formData.n8nWorkflowName.trim()
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update astrologer');
-      showToast(`Astrologer ${data.reader.name} updated successfully!`);
-      setEditModalOpen(false);
-      setEditingReader(null);
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Error updating astrologer', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteAstrologer = async () => {
-    if (!deleteConfirmReader) return;
-    setActionLoading(true);
-    try {
-      const res = await adminFetch(`/api/readers/${deleteConfirmReader.id}`, {
-        method: 'DELETE'
-      });
-      if (!res.ok) throw new Error('Failed to delete astrologer');
-      showToast(`Astrologer ${deleteConfirmReader.name} has been deleted.`, 'info');
-      setDeleteConfirmReader(null);
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Error deleting astrologer', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleToggleOnline = async (reader: Reader) => {
-    const nextStatus = !reader.isOnline;
-    try {
-      const res = await adminFetch(`/api/readers/${reader.id}/toggle`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field: 'isOnline', value: nextStatus })
-      });
-      if (res.ok) {
-        setReaders(prev => prev.map(r => r.id === reader.id ? { ...r, isOnline: nextStatus, status: nextStatus ? 'online' : 'offline' } : r));
-        showToast(`${reader.name} is now ${nextStatus ? 'Online' : 'Offline'}`);
-      }
-    } catch (err) {
-      showToast('Failed to toggle status', 'error');
-    }
-  };
-
-  const handleToggleActive = async (reader: Reader) => {
-    const nextActive = reader.isActive === false ? true : false;
-    try {
-      const res = await adminFetch(`/api/readers/${reader.id}/toggle`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field: 'isActive', value: nextActive })
-      });
-      if (res.ok) {
-        setReaders(prev => prev.map(r => r.id === reader.id ? { ...r, isActive: nextActive } : r));
-        showToast(`${reader.name} is now ${nextActive ? 'Active' : 'Deactivated'}`);
-      }
-    } catch (err) {
-      showToast('Failed to toggle active state', 'error');
-    }
+  // Helper: Relative timestamp
+  const getRelativeTime = (timestamp?: string) => {
+    if (!timestamp) return 'Recently';
+    const diff = Math.floor((nowTimestamp - new Date(timestamp).getTime()) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
   };
 
   // =========================================================================
-  // n8n WORKFLOW TOGGLE & ASSIGNMENT HANDLERS
+  // ACTIONS: Admin Send Reply, Reassign, Complete, Toggle Astrologer
   // =========================================================================
-  const handleToggleWorkflow = async (reader: Reader, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const nextVal = reader.isWorkflowEnabled === false ? true : false;
-    // Optimistic UI update
-    setReaders(prev => prev.map(r => r.id === reader.id ? { ...r, isWorkflowEnabled: nextVal } : r));
-
-    try {
-      const res = await adminFetch(`/api/admin/astrologers/${reader.id}/toggle-workflow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isWorkflowEnabled: nextVal })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to toggle workflow');
-      if (data.reader) {
-        setReaders(prev => prev.map(r => r.id === reader.id ? { ...r, ...data.reader } : r));
-        if (workflowModalReader && workflowModalReader.id === reader.id) {
-          setWorkflowModalReader(prev => prev ? { ...prev, ...data.reader } : null);
-          setWorkflowFormData(prev => ({ ...prev, isWorkflowEnabled: nextVal }));
-        }
-      }
-      showToast(
-        nextVal
-          ? `n8n Workflow ENABLED for ${reader.name} (${reader.astroId || reader.id})`
-          : `n8n Workflow STOPPED for ${reader.name} (${reader.astroId || reader.id}) — executions halted`,
-        nextVal ? 'success' : 'info'
-      );
-    } catch (err: any) {
-      // Revert optimistic update
-      setReaders(prev => prev.map(r => r.id === reader.id ? { ...r, isWorkflowEnabled: !nextVal } : r));
-      showToast(err.message || 'Failed to toggle n8n workflow', 'error');
-    }
-  };
-
-  const openWorkflowModal = (reader: Reader) => {
-    const resolvedAstroId = reader.astroId || reader.id;
-    setWorkflowModalReader(reader);
-    setWorkflowFormData({
-      n8nWorkflowId: reader.n8nWorkflowId || `wf_${resolvedAstroId}`,
-      n8nWebhookUrl: reader.n8nWebhookUrl || '',
-      n8nWorkflowName: reader.n8nWorkflowName || `Consultation Flow - ${reader.name || resolvedAstroId}`,
-      isWorkflowEnabled: reader.isWorkflowEnabled !== false
-    });
-    setTestWorkflowResult(null);
-    setTestMessageInput(`Greetings ${reader.name}, what do the cosmic energies and planetary alignments indicate for my career this season?`);
-  };
-
-  const handleSaveWorkflowMapping = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!workflowModalReader) return;
-    setActionLoading(true);
-    try {
-      const res = await adminFetch(`/api/admin/astrologers/${workflowModalReader.id}/workflow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(workflowFormData)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save workflow mapping');
-      showToast(`n8n workflow mapped to ${workflowModalReader.name} (${workflowModalReader.astroId || workflowModalReader.id}) successfully!`);
-      if (data.reader) {
-        setReaders(prev => prev.map(r => r.id === workflowModalReader.id ? { ...r, ...data.reader } : r));
-        setWorkflowModalReader(prev => prev ? { ...prev, ...data.reader } : null);
-      }
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to save workflow mapping', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleTestWorkflow = async () => {
-    if (!workflowModalReader) return;
-    setTestWorkflowLoading(true);
-    setTestWorkflowResult(null);
-    try {
-      const res = await adminFetch(`/api/admin/astrologers/${workflowModalReader.id}/test-workflow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: testMessageInput })
-      });
-      const data = await res.json();
-      setTestWorkflowResult(data);
-      if (data.status === 'stopped') {
-        showToast(`Workflow execution blocked: toggle is currently OFF for ${workflowModalReader.name}`, 'info');
-      } else if (data.status === 'success') {
-        showToast(`n8n Workflow execution succeeded (${data.latencyMs}ms)! Real AI response received.`, 'success');
-        fetchData();
-      } else {
-        showToast(data.error || `Workflow execution finished with status: ${data.status}`, 'info');
-      }
-    } catch (err: any) {
-      setTestWorkflowResult({ status: 'failed', error: err.message || 'Network error triggering test' });
-      showToast(err.message || 'Workflow test request failed', 'error');
-    } finally {
-      setTestWorkflowLoading(false);
-    }
-  };
-
-  const handleSaveN8nConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    try {
-      const res = await adminFetch('/api/admin/n8n/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(n8nConfig)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save n8n configuration');
-      showToast('Global n8n automation settings updated and saved successfully!');
-    } catch (err: any) {
-      showToast(err.message || 'Error updating n8n configuration', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!passwordResetReader || !newPasswordValue.trim()) return;
-    setActionLoading(true);
-    try {
-      const res = await adminFetch('/api/astrologer/set-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          readerId: passwordResetReader.id,
-          astroId: passwordResetReader.astroId,
-          newPassword: newPasswordValue.trim()
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
-      showToast(`Password successfully reset for ${passwordResetReader.name}!`);
-      setPasswordResetReader(null);
-      setNewPasswordValue('');
-    } catch (err: any) {
-      showToast(err.message || 'Error resetting password', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Filtered Astrologers
-  const filteredReaders = readers.filter(r => {
-    const matchesSearch = !astroSearch.trim() || 
-      r.name.toLowerCase().includes(astroSearch.toLowerCase()) ||
-      (r.astroId && r.astroId.toLowerCase().includes(astroSearch.toLowerCase())) ||
-      (r.specialties && r.specialties.some(s => s.toLowerCase().includes(astroSearch.toLowerCase())));
-
-    const matchesStatus = 
-      astroStatusFilter === 'all' ? true :
-      astroStatusFilter === 'online' ? r.isOnline :
-      astroStatusFilter === 'offline' ? !r.isOnline :
-      astroStatusFilter === 'inactive' ? r.isActive === false : true;
-
-    const matchesSpecialty = 
-      astroSpecialtyFilter === 'all' ? true :
-      (r.specialties && r.specialties.includes(astroSpecialtyFilter)) ||
-      (r.specialities && r.specialities.includes(astroSpecialtyFilter));
-
-    return matchesSearch && matchesStatus && matchesSpecialty;
-  });
-
-  // =========================================================================
-  // CHAT MANAGEMENT STATE & HANDLERS
-  // =========================================================================
-  const [chatSearch, setChatSearch] = useState('');
-  const [chatStatusFilter, setChatStatusFilter] = useState<'all' | 'active' | 'waiting' | 'completed'>('all');
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [selectedSessionToTransfer, setSelectedSessionToTransfer] = useState<ConsultationSession | null>(null);
-  const [transferTargetReaderId, setTransferTargetReaderId] = useState('');
-  const [transferReason, setTransferReason] = useState('Manual Admin Load Balancing');
-  const [viewTranscriptSession, setViewTranscriptSession] = useState<ConsultationSession | null>(null);
-
-  const openTransferModal = (session: ConsultationSession) => {
-    setSelectedSessionToTransfer(session);
-    // Suggest first online astrologer different from currently assigned
-    const candidate = readers.find(r => r.isOnline && r.id !== session.assignedReaderId);
-    setTransferTargetReaderId(candidate ? candidate.id : (readers[0]?.id || ''));
-    setTransferReason('Manual Load Balancing');
-    setTransferModalOpen(true);
-  };
-
-  const [adminReplyText, setAdminReplyText] = useState('');
-
-  const handleAttendChatDirectly = (session: ConsultationSession) => {
-    const targetReader = readers.find(r => r.id === session.requestedReaderId || r.id === session.assignedReaderId) || readers[0];
-    const updated: ConsultationSession = {
-      ...session,
-      status: 'active',
-      assignedReaderId: targetReader?.id || session.requestedReaderId || 'psychic-tamara',
-      assignedReaderName: targetReader?.name || session.requestedReaderName || 'Spiritual Guide'
-    };
-    saveStoredSession(updated);
-    broadcastSessionEvent('session_accepted', updated);
-    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-    setViewTranscriptSession(updated);
-    try {
-      setDoc(doc(db, 'sessions', updated.id), updated, { merge: true }).catch(() => {});
-    } catch {}
-  };
-
   const handleAdminSendReply = async () => {
-    if (!viewTranscriptSession || !adminReplyText.trim()) return;
-    const text = adminReplyText.trim();
-    setAdminReplyText('');
+    if (!selectedSession || !replyText.trim() || isSendingReply) return;
+    const text = replyText.trim();
+    setReplyText('');
+    setIsSendingReply(true);
 
-    const targetAstrologerName = viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName || 'Astrologer Support';
+    const senderName = selectedSession.assignedReaderName || selectedSession.requestedReaderName || 'LUMSIC Guide';
     const newMsg: ChatMessage = {
-      id: 'msg_admin_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      sessionId: viewTranscriptSession.id,
+      id: 'msg_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      sessionId: selectedSession.id,
       sender: 'astrologer',
-      senderName: targetAstrologerName,
+      senderName,
       text,
       timestamp: new Date().toISOString()
     };
 
-    // If session was waiting, auto-accept it!
     const updatedSession: ConsultationSession = {
-      ...viewTranscriptSession,
+      ...selectedSession,
       status: 'active',
-      assignedReaderName: targetAstrologerName,
-      messages: [...(viewTranscriptSession.messages || []), newMsg]
+      messages: [...(selectedSession.messages || []), newMsg],
+      lastMessageText: text,
+      lastMessageAt: newMsg.timestamp,
+      unreadForOperator: false
     };
 
-    setViewTranscriptSession(updatedSession);
+    // 1. Instant local update
     setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
     saveStoredSession(updatedSession);
-    broadcastSessionEvent('session_accepted', updatedSession);
-    appendMessageToStoredSession(updatedSession.id, newMsg);
     broadcastSessionEvent('message_received', newMsg);
+    broadcastSessionEvent('session_accepted', updatedSession);
 
+    // 2. Direct Firestore update (delivers instantly to seeker on any device)
     try {
-      setDoc(doc(db, 'sessions', updatedSession.id), updatedSession, { merge: true }).catch(() => {});
-    } catch {}
+      await setDoc(doc(db, 'sessions', updatedSession.id), updatedSession, { merge: true });
+    } catch (err) {
+      console.warn('Firestore reply sync notice:', err);
+    }
 
+    // 3. Dispatch to backend server
     try {
-      await fetch(`/api/sessions/${updatedSession.id}/message`, {
+      await adminFetch(`/api/sessions/${updatedSession.id}/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sender: 'astrologer',
-          senderName: targetAstrologerName,
+          senderName,
           text
         })
       });
+    } catch (err) {
+      console.warn('Backend reply dispatch notice:', err);
+    } finally {
+      setIsSendingReply(false);
+    }
+  };
+
+  const handleOpenReassignModal = (session: ConsultationSession) => {
+    setSessionToReassign(session);
+    setTargetReaderId(session.assignedReaderId || readers[0]?.id || '');
+    setReassignNote('');
+    setReassignModalOpen(true);
+  };
+
+  const handleConfirmReassign = async () => {
+    if (!sessionToReassign || !targetReaderId || isReassigning) return;
+    setIsReassigning(true);
+
+    const targetReader = readers.find(r => r.id === targetReaderId || r.astroId === targetReaderId);
+    const targetName = targetReader?.name || 'Assigned Astrologer';
+
+    const assignNotice: ChatMessage = {
+      id: 'sys_asg_' + Date.now(),
+      sessionId: sessionToReassign.id,
+      sender: 'system',
+      senderName: 'LUMSIC System',
+      text: `Consultation routed to ${targetName}. ${reassignNote ? `(${reassignNote})` : ''}`,
+      timestamp: new Date().toISOString(),
+      isSystemNotice: true
+    };
+
+    const updatedSession: ConsultationSession = {
+      ...sessionToReassign,
+      assignedReaderId: targetReaderId,
+      assignedReaderName: targetName,
+      assignedAstroId: targetReader?.astroId || targetReaderId,
+      status: 'active',
+      messages: [...(sessionToReassign.messages || []), assignNotice]
+    };
+
+    setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
+    saveStoredSession(updatedSession);
+    broadcastSessionEvent('session_updated', updatedSession);
+
+    try {
+      await setDoc(doc(db, 'sessions', updatedSession.id), updatedSession, { merge: true });
+    } catch {}
+
+    try {
+      await adminFetch(`/api/admin/inbox/${updatedSession.id}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({
+          readerId: targetReaderId,
+          note: reassignNote
+        })
+      });
+      showToast(`Conversation successfully reassigned to ${targetName}!`);
+    } catch {}
+
+    setIsReassigning(false);
+    setReassignModalOpen(false);
+    setSessionToReassign(null);
+  };
+
+  const handleCompleteSession = async (session: ConsultationSession) => {
+    const updated: ConsultationSession = {
+      ...session,
+      status: 'completed',
+      endedAt: new Date().toISOString()
+    };
+
+    setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+    saveStoredSession(updated);
+    broadcastSessionEvent('session_ended', updated);
+
+    try {
+      await setDoc(doc(db, 'sessions', updated.id), updated, { merge: true });
+    } catch {}
+
+    try {
+      await adminFetch(`/api/admin/inbox/${updated.id}/complete`, { method: 'POST' });
+      showToast(`Conversation with ${session.customerName} marked as completed.`);
     } catch {}
   };
 
-  const handleTransferChat = async () => {
-    if (!selectedSessionToTransfer || !transferTargetReaderId) return;
-    setActionLoading(true);
+  const handleToggleReader = async (readerId: string, currentOnline: boolean) => {
+    const nextStatus = !currentOnline;
+    setReaders(prev => prev.map(r => r.id === readerId ? { ...r, isOnline: nextStatus, status: nextStatus ? 'online' : 'offline' } : r));
+
     try {
-      const targetReader = readers.find(r => r.id === transferTargetReaderId || r.astroId === transferTargetReaderId);
-      const updated: ConsultationSession = {
-        ...selectedSessionToTransfer,
-        assignedReaderId: transferTargetReaderId,
-        assignedReaderName: targetReader?.name || 'Assigned Astrologer',
-        status: 'active'
-      };
-      saveStoredSession(updated);
-      broadcastSessionEvent('session_accepted', updated);
-      setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-      try {
-        setDoc(doc(db, 'sessions', updated.id), updated, { merge: true }).catch(() => {});
-      } catch {}
-
-      const res = await adminFetch('/api/admin/chats/forward', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: selectedSessionToTransfer.id,
-          newAstrologerId: transferTargetReaderId,
-          reason: transferReason,
-          adminName: currentAdminProfile?.email || 'Super Admin'
-        })
-      }).catch(() => null);
-
-      showToast(`Chat reassigned to ${targetReader?.name || 'new astrologer'}. Client preserves uninterrupted conversation.`);
-      setTransferModalOpen(false);
-      setSelectedSessionToTransfer(null);
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Error reassigning chat', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const filteredSessions = sessions.filter(s => {
-    const matchesSearch = !chatSearch.trim() ||
-      (s.customerName && s.customerName.toLowerCase().includes(chatSearch.toLowerCase())) ||
-      (s.id && s.id.toLowerCase().includes(chatSearch.toLowerCase())) ||
-      (s.requestedReaderName && s.requestedReaderName.toLowerCase().includes(chatSearch.toLowerCase())) ||
-      (s.assignedReaderName && s.assignedReaderName.toLowerCase().includes(chatSearch.toLowerCase()));
-
-    const matchesStatus = 
-      chatStatusFilter === 'all' ? (s.status === 'active' || s.status === 'waiting') :
-      s.status === chatStatusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const getWaitTimeText = (createdAt: string) => {
-    const elapsedSec = Math.max(0, Math.floor((nowTimestamp - new Date(createdAt).getTime()) / 1000));
-    const mins = Math.floor(elapsedSec / 60);
-    const secs = elapsedSec % 60;
-    return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
-  };
-
-  // =========================================================================
-  // CLIENT MANAGEMENT STATE & HANDLERS
-  // =========================================================================
-  const [clientSearch, setClientSearch] = useState('');
-  const [clientStatusFilter, setClientStatusFilter] = useState<'all' | 'active' | 'free_tier'>('all');
-  const [selectedClientProfile, setSelectedClientProfile] = useState<ClientRecord | null>(null);
-  const [clientChatHistory, setClientChatHistory] = useState<ConsultationSession[]>([]);
-  const [clientChatsLoading, setClientChatsLoading] = useState(false);
-
-  const openClientProfile = async (client: ClientRecord) => {
-    setSelectedClientProfile(client);
-    setClientChatsLoading(true);
-    try {
-      const res = await adminFetch(`/api/admin/clients/${client.id}/chats`);
-      if (res.ok) {
-        const data = await res.json();
-        setClientChatHistory(data.sessions || []);
-      } else {
-        // Fallback filter from sessions in state
-        setClientChatHistory(sessions.filter(s => s.customerId === client.id));
-      }
-    } catch (err) {
-      setClientChatHistory(sessions.filter(s => s.customerId === client.id));
-    } finally {
-      setClientChatsLoading(false);
-    }
-  };
-
-  const filteredClients = clients.filter(c => {
-    const matchesSearch = !clientSearch.trim() ||
-      (c.name && c.name.toLowerCase().includes(clientSearch.toLowerCase())) ||
-      (c.id && c.id.toLowerCase().includes(clientSearch.toLowerCase())) ||
-      (c.email && c.email.toLowerCase().includes(clientSearch.toLowerCase())) ||
-      (c.phone && c.phone.toLowerCase().includes(clientSearch.toLowerCase()));
-
-    const matchesStatus = 
-      clientStatusFilter === 'all' ? true :
-      c.accountStatus === clientStatusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  // =========================================================================
-  // ESSENTIAL SETTINGS STATE & HANDLERS
-  // =========================================================================
-  const [settingsData, setSettingsData] = useState({
-    defaultChatPrice: 1.50,
-    defaultVideoPrice: 2.50,
-    minPrice: 0.99,
-    maxPrice: 5.00,
-    freeChatEnabled: true,
-    freeChatMinutes: 2,
-    autoAssignEnabled: true,
-    maxChatsPerAstrologer: 3,
-    onlineOnly: true,
-    adminName: 'Alex Vance',
-    adminEmail: currentAdminProfile?.email || 'admin@lumsic.com'
-  });
-
-  useEffect(() => {
-    adminFetch('/api/admin/settings')
-      .then(res => res.json())
-      .then(data => {
-        if (data.settings) {
-          setSettingsData(prev => ({
-            ...prev,
-            defaultChatPrice: data.settings.chatPricePerMinuteDefault ?? prev.defaultChatPrice,
-            defaultVideoPrice: data.settings.videoPricePerMinuteDefault ?? prev.defaultVideoPrice,
-            freeChatEnabled: data.settings.freeChatEnabled ?? prev.freeChatEnabled,
-            freeChatMinutes: data.settings.freeChatMinutes ?? prev.freeChatMinutes,
-            autoAssignEnabled: data.settings.autoAssignEnabled ?? prev.autoAssignEnabled,
-            maxChatsPerAstrologer: data.settings.maxChatsPerAstrologer ?? prev.maxChatsPerAstrologer,
-            onlineOnly: data.settings.onlineOnly ?? prev.onlineOnly,
-            adminName: data.settings.adminName ?? prev.adminName,
-            adminEmail: currentAdminProfile?.email || data.settings.adminEmail || prev.adminEmail
-          }));
-        }
-      })
-      .catch(() => {});
-  }, [currentAdminProfile]);
-
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    try {
-      const res = await adminFetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: settingsData })
+      await adminFetch(`/api/readers/${readerId}/toggle`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isOnline: nextStatus, status: nextStatus ? 'online' : 'offline' })
       });
-      if (!res.ok) throw new Error('Failed to update settings');
-      showToast('Platform settings saved successfully!');
-    } catch (err: any) {
-      showToast(err.message || 'Error saving settings', 'error');
-    } finally {
-      setActionLoading(false);
+      showToast(`Astrologer status updated to ${nextStatus ? 'Online' : 'Offline'}.`);
+    } catch {
+      showToast('Status updated locally.', 'info');
     }
   };
 
-  // =========================================================================
-  // LOGOUT HANDLER
-  // =========================================================================
-  const handleLogout = async () => {
+  const handleToggleWorkflow = async (readerId: string, currentEnabled: boolean) => {
+    const nextWorkflow = !currentEnabled;
+    setReaders(prev => prev.map(r => r.id === readerId ? { ...r, isWorkflowEnabled: nextWorkflow } : r));
+
     try {
-      await signOutCurrentUser();
-      showToast('Logged out successfully', 'info');
-      setTimeout(() => {
-        onBackToSite();
-      }, 500);
-    } catch (err) {
-      console.error('Logout error:', err);
-      onBackToSite();
-    }
+      await adminFetch(`/api/admin/astrologers/${readerId}/toggle-workflow`, {
+        method: 'POST',
+        body: JSON.stringify({ isWorkflowEnabled: nextWorkflow })
+      });
+      showToast(`Automation workflow ${nextWorkflow ? 'enabled' : 'disabled'} for astrologer.`);
+    } catch {}
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#070A12] text-slate-100 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-200">
       
-      {/* GLOBAL TOAST NOTIFICATION */}
+      {/* Hidden audio element for incoming chat chime */}
+      <audio 
+        ref={audioRef} 
+        src="/assets/aistudio/mixkit-marimba-waiting-ringtone-1360_715cddd4.wav" 
+        preload="auto" 
+      />
+
+      {/* ===================================================================== */}
+      {/* TOP HEADER: BRANDING, STATUS, GLOBAL TABS & ACTIONS */}
+      {/* ===================================================================== */}
+      <header className="sticky top-0 z-30 bg-[#0B0F1C]/90 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-6 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+          
+          {/* Brand & Connection Badge */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-rose-600 to-indigo-600 p-0.5 shadow-lg shadow-rose-900/20 flex items-center justify-center">
+              <div className="w-full h-full bg-[#070A12] rounded-[10px] flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-serif font-black tracking-wider text-base text-white">LUMSIC</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                  Admin Command Center
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-emerald-400 font-medium">Live Universal Sync</span>
+                <span className="text-slate-600">•</span>
+                <span>{stats.total} total conversations</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <nav className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800/80 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'overview'
+                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Overview</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('inbox')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'inbox'
+                  ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold shadow-md shadow-rose-600/20'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>All Chats / Inbox</span>
+              {stats.pending > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black animate-pulse">
+                  {stats.pending}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('chats')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'chats'
+                  ? 'bg-slate-800 text-white font-bold shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Chat Management</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('astrologers')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                activeTab === 'astrologers'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-md shadow-indigo-600/20'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Astrologers</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">
+                {stats.onlineAstrologers} Online
+              </span>
+            </button>
+          </nav>
+
+          {/* Right Action Tools */}
+          <div className="flex items-center gap-2">
+            
+            {/* Audio Mute/Unmute */}
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              title={soundEnabled ? 'Mute Chime Alerts' : 'Unmute Chime Alerts'}
+              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-300 hover:bg-slate-800 transition cursor-pointer"
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+            </button>
+
+            {/* Manual Refresh */}
+            <button
+              onClick={() => fetchData(true)}
+              disabled={isRefreshing}
+              title="Refresh Data"
+              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+
+            {/* Back to Site */}
+            <button
+              onClick={onBackToSite}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800 text-xs font-medium transition cursor-pointer"
+            >
+              Website
+            </button>
+
+            {/* Sign Out */}
+            <button
+              onClick={async () => {
+                await signOutCurrentUser().catch(() => {});
+                localStorage.removeItem('lumsic_admin_token');
+                sessionStorage.removeItem('lumsic_admin_token');
+                window.location.reload();
+              }}
+              title="Sign Out Admin"
+              className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+
+        </div>
+      </header>
+
+      {/* Global Toast Alert */}
       {toastMessage && (
-        <div className={`fixed top-4 right-4 z-50 py-2.5 px-4 rounded-xl shadow-xl border text-sm font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-200 ${
-          toastMessage.type === 'success' 
-            ? 'bg-emerald-950/90 text-emerald-200 border-emerald-600/40' 
-            : toastMessage.type === 'error'
-            ? 'bg-rose-950/90 text-rose-200 border-rose-600/40'
-            : 'bg-slate-800/90 text-slate-200 border-slate-600/40'
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl border shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200 ${
+          toastMessage.type === 'error'
+            ? 'bg-rose-950/90 border-rose-500/50 text-rose-200'
+            : toastMessage.type === 'info'
+            ? 'bg-indigo-950/90 border-indigo-500/50 text-indigo-200'
+            : 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
         }`}>
-          {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-          {toastMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400" />}
-          {toastMessage.type === 'info' && <ShieldCheck className="w-4 h-4 text-sky-400" />}
+          <Bell className="w-4 h-4" />
           <span>{toastMessage.text}</span>
         </div>
       )}
 
-      {/* TOP HEADER */}
-      <header className="h-16 bg-slate-950 border-b border-slate-800 px-4 lg:px-6 flex items-center justify-between shrink-0 sticky top-0 z-30">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-            className="lg:hidden p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-rose-600/20">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base tracking-tight text-white font-serif">LUMSIC</span>
-                <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-rose-600/20 text-rose-400 border border-rose-500/30">
-                  Admin Panel
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">Astrology &amp; Reader Platform Management</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Back to Website Button */}
-          <button
-            onClick={onBackToSite}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 shadow-md shadow-amber-500/20 transition cursor-pointer active:scale-95"
-            title="Return to the main live website"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Website</span>
-          </button>
-
-          {/* Astrologer Dashboard Workstation Button */}
-          {onOpenAstrologerDashboard && (
-            <button
-              onClick={onOpenAstrologerDashboard}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:brightness-110 shadow-md shadow-indigo-600/30 border border-indigo-400/40 transition cursor-pointer active:scale-95"
-              title="Open the Astrologer Workstation & Live Console"
-            >
-              <Compass className="w-3.5 h-3.5 text-amber-300" />
-              <span>Astrologer Dashboard</span>
-            </button>
-          )}
-
-          {/* Refresh Button */}
-          <button
-            onClick={() => fetchData(true)}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 transition cursor-pointer"
-            title="Refresh dashboard data"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-rose-400' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          {/* Admin User Badge */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-            <div className="w-8 h-8 rounded-full bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-300 font-bold text-xs">
-              {currentAdminProfile?.email ? currentAdminProfile.email[0].toUpperCase() : 'A'}
-            </div>
-            <div className="hidden md:block text-left">
-              <p className="text-xs font-semibold text-white truncate max-w-[140px]">
-                {currentAdminProfile?.email || 'System Admin'}
-              </p>
-              <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Verified Admin
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* MAIN CONTAINER */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ===================================================================== */}
+      {/* MAIN CONTENT BODY */}
+      {/* ===================================================================== */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         
-        {/* SIDEBAR NAVIGATION - 6 SECTIONS ONLY */}
-        <aside className={`
-          ${mobileMenuOpen ? 'block' : 'hidden'} lg:block 
-          w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between shrink-0 
-          fixed lg:static inset-y-16 left-0 z-40 transition-all
-        `}>
-          <div className="p-4 space-y-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">
-              Management
-            </p>
-
-            {/* Direct Link to Astrologer Dashboard */}
-            {onOpenAstrologerDashboard && (
-              <button
-                onClick={() => { onOpenAstrologerDashboard(); setMobileMenuOpen(false); }}
-                className="w-full mb-2 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer text-indigo-300 hover:text-white bg-gradient-to-r from-indigo-950/60 to-purple-950/40 hover:from-indigo-900/60 hover:to-purple-900/50 border border-indigo-500/30 shadow-sm"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Compass className="w-4 h-4 text-amber-400" />
-                  <span>Astrologer Dashboard</span>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-                  Workstation
-                </span>
-              </button>
-            )}
-
-            {/* 1. Overview */}
-            <button
-              onClick={() => { setActiveTab('overview'); setMobileMenuOpen(false); }}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'overview'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className="w-4 h-4" />
-                <span>Overview</span>
-              </div>
-            </button>
-
-            {/* 2. Manage Astrologers */}
-            <button
-              onClick={() => { setActiveTab('astrologers'); setMobileMenuOpen(false); }}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'astrologers'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Users className="w-4 h-4" />
-                <span>Manage Astrologers</span>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                activeTab === 'astrologers' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-300'
-              }`}>
-                {onlineAstrologersCount} Online
-              </span>
-            </button>
-
-            {/* 3. Chat Management */}
-            <button
-              onClick={() => { setActiveTab('chats'); setMobileMenuOpen(false); }}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'chats'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <MessageSquare className="w-4 h-4" />
-                <span>Chat Management</span>
-              </div>
-              {pendingChatsList.length > 0 ? (
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500 text-slate-950 animate-pulse">
-                  {pendingChatsList.length} Pending
-                </span>
-              ) : activeChatsList.length > 0 ? (
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                  activeTab === 'chats' ? 'bg-white/20 text-white' : 'bg-emerald-900/60 text-emerald-300'
-                }`}>
-                  {activeChatsList.length} Active
-                </span>
-              ) : null}
-            </button>
-
-            {/* 4. Clients */}
-            <button
-              onClick={() => { setActiveTab('clients'); setMobileMenuOpen(false); }}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'clients'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <UserCheck className="w-4 h-4" />
-                <span>Clients</span>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                activeTab === 'clients' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-300'
-              }`}>
-                {totalClientsCount}
-              </span>
-            </button>
-
-            {/* 5. Settings */}
-            <button
-              onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
-              className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'settings'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Settings className="w-4 h-4" />
-                <span>Settings</span>
-              </div>
-            </button>
-          </div>
-
-          {/* 6. Logout Button */}
-          <div className="p-4 border-t border-slate-800">
-            <button
-              onClick={handleLogout}
-              className="w-full px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2.5 transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* MAIN WORKSPACE CONTENT */}
-        <main className="flex-1 overflow-y-auto bg-slate-900 p-4 lg:p-8">
-          
-          {/* ================================================================ */}
-          {/* 1. OVERVIEW SCREEN */}
-          {/* ================================================================ */}
-          {activeTab === 'overview' && (
-            <div className="max-w-6xl mx-auto space-y-6">
+        {/* =================================================================== */}
+        {/* TAB 1: EXECUTIVE OVERVIEW */}
+        {/* =================================================================== */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            
+            {/* KPI Cards Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">Platform Overview</h1>
-                <p className="text-xs text-slate-400 mt-0.5">Real-time status of astrologers, chats, and clients</p>
+              <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                <span className="text-[11px] font-medium text-slate-400">Total Chats</span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-white">{stats.total}</span>
+                  <MessageSquare className="w-4 h-4 text-indigo-400" />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1">Universal customer queue</span>
               </div>
 
-              {/* 5 ESSENTIAL SUMMARY CARDS */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-                
-                {/* Total Astrologers */}
-                <div 
-                  onClick={() => setActiveTab('astrologers')}
-                  className="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition cursor-pointer"
-                >
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
-                    <span className="text-xs font-medium">Total Astrologers</span>
-                    <Users className="w-4 h-4 text-rose-400" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{totalAstrologersCount}</div>
-                  <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                    <span>{readers.filter(r => r.isActive !== false).length} active profiles</span>
-                  </div>
+              <div className="bg-[#0B0F1C] border border-emerald-900/30 rounded-2xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+                <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active Chats
+                </span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-emerald-300">{stats.active}</span>
+                  <Zap className="w-4 h-4 text-emerald-400" />
                 </div>
-
-                {/* Online Astrologers */}
-                <div 
-                  onClick={() => setActiveTab('astrologers')}
-                  className="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition cursor-pointer"
-                >
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
-                    <span className="text-xs font-medium">Online Astrologers</span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  </div>
-                  <div className="text-2xl font-black text-emerald-400">{onlineAstrologersCount}</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Ready for sessions
-                  </div>
-                </div>
-
-                {/* Total Registered Clients */}
-                <div 
-                  onClick={() => setActiveTab('clients')}
-                  className="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition cursor-pointer"
-                >
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
-                    <span className="text-xs font-medium">Total Clients</span>
-                    <UserCheck className="w-4 h-4 text-sky-400" />
-                  </div>
-                  <div className="text-2xl font-black text-white">{totalClientsCount}</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Registered seekers
-                  </div>
-                </div>
-
-                {/* Active Chats */}
-                <div 
-                  onClick={() => setActiveTab('chats')}
-                  className="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-sm hover:border-slate-700 transition cursor-pointer"
-                >
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
-                    <span className="text-xs font-medium">Active Chats</span>
-                    <MessageSquare className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div className="text-2xl font-black text-emerald-400">{activeChatsList.length}</div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    In live consultation
-                  </div>
-                </div>
-
-                {/* Pending Chats */}
-                <div 
-                  onClick={() => setActiveTab('chats')}
-                  className={`bg-slate-950 border rounded-2xl p-4 shadow-sm hover:border-slate-700 transition cursor-pointer ${
-                    pendingChatsList.length > 0 ? 'border-amber-500/50 bg-amber-950/10' : 'border-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-slate-400 mb-2">
-                    <span className="text-xs font-medium">Pending Chats</span>
-                    <Clock className={`w-4 h-4 ${pendingChatsList.length > 0 ? 'text-amber-400' : 'text-slate-400'}`} />
-                  </div>
-                  <div className={`text-2xl font-black ${pendingChatsList.length > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
-                    {pendingChatsList.length}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    {pendingChatsList.length > 0 ? 'Awaiting pickup' : 'All queues clear'}
-                  </div>
-                </div>
-
+                <span className="text-[10px] text-slate-500 mt-1">Live in session right now</span>
               </div>
 
-              {/* PENDING CHATS ACTION SECTION (IF ANY PENDING) */}
-              {pendingChatsList.length > 0 && (
-                <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
-                      <h2 className="text-sm font-bold text-amber-300">
-                        {pendingChatsList.length} Consultation{pendingChatsList.length > 1 ? 's' : ''} Waiting for Astrologer Pickup
-                      </h2>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab('chats')}
-                      className="text-xs font-bold text-amber-300 hover:text-amber-200 flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Open Chat Management</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-[10px] uppercase font-bold text-slate-400 border-b border-amber-500/20">
-                        <tr>
-                          <th className="pb-2">Client</th>
-                          <th className="pb-2">Requested Astrologer</th>
-                          <th className="pb-2">Waiting Time</th>
-                          <th className="pb-2 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-amber-500/10">
-                        {pendingChatsList.slice(0, 4).map(session => (
-                          <tr key={session.id} className="text-slate-300">
-                            <td className="py-2.5 font-bold text-white flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold">
-                                {session.customerName?.[0] || 'S'}
-                              </div>
-                              {session.customerName || 'Seeker'}
-                            </td>
-                            <td className="py-2.5">
-                              {session.requestedReaderName || 'Any Available'}
-                            </td>
-                            <td className="py-2.5">
-                              <span className="px-2 py-0.5 rounded-full font-mono text-[11px] font-bold bg-amber-500/20 text-amber-300">
-                                {getWaitTimeText(session.createdAt)}
-                              </span>
-                            </td>
-                            <td className="py-2.5 text-right">
-                              <button
-                                onClick={() => openTransferModal(session)}
-                                className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer"
-                              >
-                                Assign / Transfer
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              <div className="bg-[#0B0F1C] border border-amber-900/40 rounded-2xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
+                <span className="text-[11px] font-medium text-amber-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                  Pending Pickup
+                </span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-amber-300">{stats.pending}</span>
+                  <Clock className="w-4 h-4 text-amber-400" />
                 </div>
-              )}
+                <span className="text-[10px] text-amber-400/80 mt-1">Requires astrologer reply</span>
+              </div>
 
-              {/* QUICK ACTIVE & PENDING SESSIONS PREVIEW */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                <span className="text-[11px] font-medium text-slate-400">Completed</span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-slate-200">{stats.completed}</span>
+                  <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1">Archived consultations</span>
+              </div>
+
+              <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                <span className="text-[11px] font-medium text-slate-400">Total Seekers</span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-white">{stats.uniqueCustomers}</span>
+                  <User className="w-4 h-4 text-purple-400" />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1">Unique customer profiles</span>
+              </div>
+
+              <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+                <span className="text-[11px] font-medium text-slate-400">Online Astrologers</span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <span className="text-2xl font-bold text-amber-400">{stats.onlineAstrologers}</span>
+                  <Users className="w-4 h-4 text-amber-400" />
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1">Of {readers.length} on roster</span>
+              </div>
+
+            </div>
+
+            {/* Priority Waiting Queue Alert */}
+            {stats.pending > 0 && (
+              <div className="bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-transparent border border-amber-500/40 rounded-2xl p-4 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-bold text-white">Live Consultations &amp; Incoming Chats</h2>
-                    {pendingChatsList.length > 0 && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500 text-slate-950 animate-pulse">
-                        {pendingChatsList.length} Incoming
-                      </span>
-                    )}
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    <h2 className="text-sm font-bold text-amber-200">
+                      Incoming Priority Queue: {stats.pending} Customer{stats.pending > 1 ? 's' : ''} Waiting for Reply
+                    </h2>
                   </div>
-                  <button
-                    onClick={() => setActiveTab('chats')}
-                    className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                  <button 
+                    onClick={() => {
+                      setInboxStatusFilter('waiting');
+                      setActiveTab('inbox');
+                    }}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
                   >
-                    <span>View all ({liveChatsList.length})</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <span>View All In Inbox</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                {liveChatsList.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-slate-400">
-                    No active or pending chat sessions currently in progress.
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {sessions.filter(s => s.status === 'waiting').slice(0, 3).map(sess => (
+                    <div 
+                      key={sess.id}
+                      className="bg-[#070A12]/80 border border-amber-500/30 rounded-xl p-3 flex flex-col justify-between hover:border-amber-400 transition"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">{sess.customerName || 'Seeker'}</span>
+                          <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded-full">
+                            Wait: {getElapsedText(sess.createdAt)}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Requested: <span className="text-amber-300 font-medium">{sess.requestedReaderName || sess.assignedReaderName}</span>
+                        </div>
+                        <p className="text-xs text-slate-300 italic mt-2 line-clamp-2 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                          "{sess.initialQuestion || sess.lastMessageText || 'Hello, I need guidance today.'}"
+                        </p>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500">ID: {sess.id.substring(0, 14)}...</span>
+                        <button
+                          onClick={() => {
+                            setSelectedSessionId(sess.id);
+                            setActiveTab('inbox');
+                          }}
+                          className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Attend & Reply</span>
+                          <Send className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions & Recent Conversations */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Recent Conversations List */}
+              <div className="lg:col-span-2 bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Recent Customer Consultations</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Real-time incoming feed from all users and readers</p>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('inbox')}
+                    className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Open Full Inbox</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="divide-y divide-slate-800/60">
+                  {sessions.slice(0, 6).map(sess => (
+                    <div 
+                      key={sess.id}
+                      onClick={() => {
+                        setSelectedSessionId(sess.id);
+                        setActiveTab('inbox');
+                      }}
+                      className="py-3 px-2 rounded-xl hover:bg-slate-900/60 transition cursor-pointer flex items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                          {(sess.customerName || 'S').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white truncate">{sess.customerName || 'Anonymous Seeker'}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                              sess.status === 'active' 
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : sess.status === 'waiting'
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {sess.status === 'waiting' ? 'Pending' : sess.status}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            {sess.lastMessageText || sess.topic || 'General Consultation'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-[11px] text-slate-300 font-medium">
+                          {sess.assignedReaderName || sess.requestedReaderName || 'Tamara'}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {getRelativeTime(sess.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Roster & Quick Actions Sidebar */}
+              <div className="space-y-4">
+                
+                {/* Astrologer Workload Spotlight */}
+                <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-white">Astrologer Status</h3>
+                    <button 
+                      onClick={() => setActiveTab('astrologers')}
+                      className="text-xs text-slate-400 hover:text-white"
+                    >
+                      Manage
+                    </button>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {readers.slice(0, 5).map(reader => {
+                      const activeChats = sessions.filter(s => (s.assignedReaderId === reader.id || s.requestedReaderId === reader.id) && s.status === 'active').length;
+                      return (
+                        <div key={reader.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-900/40 border border-slate-800/60">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative">
+                              <img src={reader.avatar} alt={reader.name} className="w-7 h-7 rounded-full object-cover" />
+                              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-950 ${reader.isOnline ? 'bg-emerald-500' : 'bg-slate-600'}`} />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-200 block truncate">{reader.name}</span>
+                              <span className="text-[10px] text-slate-400">{(reader as any).specialization || reader.category || reader.title}</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              activeChats > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {activeChats} active
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Database Connectivity Spotlight */}
+                <div className="bg-gradient-to-br from-indigo-950/40 to-slate-900/60 border border-indigo-500/30 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 text-indigo-300 text-xs font-bold mb-1">
+                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                    <span>Real-Time Engine Status</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Firestore collection <code className="text-amber-300 font-mono">sessions</code> and Cloud Run Express backend are synchronized in real time.
+                  </p>
+                  <div className="mt-3 pt-2 border-t border-indigo-500/20 flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Admin: <strong className="text-slate-200">{currentAdminProfile?.email || 'bankush014@gmail.com'}</strong></span>
+                    <span className="text-emerald-400 font-bold">Connected</span>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 2: ALL CHATS / OMNICHANNEL INBOX (MASTER-DETAIL SPLIT PANE) */}
+        {/* =================================================================== */}
+        {activeTab === 'inbox' && (
+          <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-[calc(100vh-140px)] min-h-[600px]">
+            
+            {/* ------------------------------------------------------------- */}
+            {/* LEFT PANE: CONVERSATION LIST (MASTER) */}
+            {/* ------------------------------------------------------------- */}
+            <div className="w-full md:w-96 md:min-w-[340px] md:max-w-[420px] border-r border-slate-800/80 flex flex-col bg-[#070A12]">
+              
+              {/* Header & Search */}
+              <div className="p-3.5 border-b border-slate-800/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-rose-500" />
+                    <span>Admin Inbox</span>
+                    <span className="text-xs text-slate-400 font-mono font-normal">({filteredInboxSessions.length})</span>
+                  </h2>
+
+                  {/* Filter by Reader Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={inboxAstrologerFilter}
+                      onChange={e => setInboxAstrologerFilter(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="all">All Astrologers</option>
+                      {readers.map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search customer, ID, topic..."
+                    value={inboxSearch}
+                    onChange={e => setInboxSearch(e.target.value)}
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl pl-8.5 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                  />
+                  {inboxSearch && (
+                    <button onClick={() => setInboxSearch('')} className="absolute right-2.5 top-2 text-slate-500 hover:text-white">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Status Pills */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                  <button
+                    onClick={() => setInboxStatusFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+                      inboxStatusFilter === 'all'
+                        ? 'bg-slate-200 text-slate-950 font-bold'
+                        : 'bg-slate-900 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    All ({sessions.length})
+                  </button>
+
+                  <button
+                    onClick={() => setInboxStatusFilter('waiting')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      inboxStatusFilter === 'waiting'
+                        ? 'bg-amber-400 text-slate-950 font-bold'
+                        : 'bg-slate-900 text-slate-400 hover:text-amber-300'
+                    }`}
+                  >
+                    <span>Pending</span>
+                    {stats.pending > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">
+                        {stats.pending}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setInboxStatusFilter('active')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+                      inboxStatusFilter === 'active'
+                        ? 'bg-emerald-500 text-slate-950 font-bold'
+                        : 'bg-slate-900 text-slate-400 hover:text-emerald-300'
+                    }`}
+                  >
+                    Active ({stats.active})
+                  </button>
+
+                  <button
+                    onClick={() => setInboxStatusFilter('completed')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+                      inboxStatusFilter === 'completed'
+                        ? 'bg-slate-700 text-white font-bold'
+                        : 'bg-slate-900 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Completed ({stats.completed})
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Conversations Scrollable List */}
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+                {filteredInboxSessions.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">No conversations matching current filter.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-                        <tr>
-                          <th className="pb-2">Client</th>
-                          <th className="pb-2">Astrologer</th>
-                          <th className="pb-2">Rate</th>
-                          <th className="pb-2">Status</th>
-                          <th className="pb-2 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {liveChatsList.slice(0, 6).map(session => (
-                          <tr key={session.id} className="text-slate-300">
-                            <td className="py-2.5 font-bold text-white">
-                              {session.customerName || 'Seeker'}
-                            </td>
-                            <td className="py-2.5 text-slate-300">
-                              {session.assignedReaderName || session.requestedReaderName}
-                            </td>
-                            <td className="py-2.5 font-mono text-slate-400">
-                              £{session.ratePerMinute?.toFixed(2) || '1.50'}/min
-                            </td>
-                            <td className="py-2.5">
-                              {session.status === 'waiting' ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/80 animate-pulse">
-                                  Pending Pickup
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                  Active Live
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2.5 text-right space-x-2">
-                              <button
-                                onClick={() => openTransferModal(session)}
-                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition cursor-pointer"
-                              >
-                                {session.status === 'waiting' ? 'Assign' : 'Transfer'}
-                              </button>
-                              <button
-                                onClick={() => setViewTranscriptSession(session)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                                  session.status === 'waiting'
-                                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 font-bold shadow-sm'
-                                    : 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-300'
-                                }`}
-                              >
-                                {session.status === 'waiting' ? 'Attend / View' : 'View Chat'}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  filteredInboxSessions.map(sess => {
+                    const isSelected = sess.id === selectedSession?.id;
+                    const isWaiting = sess.status === 'waiting';
+                    const isActive = sess.status === 'active';
+
+                    return (
+                      <div
+                        key={sess.id}
+                        onClick={() => setSelectedSessionId(sess.id)}
+                        className={`p-3 transition cursor-pointer flex items-start gap-3 relative ${
+                          isSelected
+                            ? 'bg-slate-800/70 border-l-4 border-rose-500'
+                            : 'hover:bg-slate-900/50'
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div className="relative shrink-0 mt-0.5">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md ${
+                            isWaiting 
+                              ? 'bg-gradient-to-tr from-amber-500 to-rose-500' 
+                              : isActive 
+                              ? 'bg-gradient-to-tr from-emerald-500 to-teal-600'
+                              : 'bg-gradient-to-tr from-slate-600 to-slate-700'
+                          }`}>
+                            {(sess.customerName || 'S').charAt(0).toUpperCase()}
+                          </div>
+                          {isWaiting && (
+                            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 border-2 border-[#070A12] animate-ping" />
+                          )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                              {sess.customerName || 'Anonymous Seeker'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 shrink-0">
+                              {getRelativeTime(sess.lastMessageAt || sess.createdAt)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400 truncate">
+                              Astrologer: <strong className="text-amber-300 font-normal">{sess.assignedReaderName || sess.requestedReaderName || 'Psychic Tamara'}</strong>
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-400 truncate mt-1">
+                            {sess.lastMessageText || sess.initialQuestion || 'Consultation started'}
+                          </p>
+
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-full ${
+                              isWaiting 
+                                ? 'bg-amber-400/15 text-amber-300 border border-amber-400/30 animate-pulse'
+                                : isActive
+                                ? 'bg-emerald-400/15 text-emerald-300 border border-emerald-400/30'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {isWaiting ? 'Pending Pickup' : sess.status}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {getElapsedText(sess.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })
                 )}
               </div>
 
             </div>
-          )}
 
-          {/* ================================================================ */}
-          {/* 2. MANAGE ASTROLOGERS */}
-          {/* ================================================================ */}
-          {activeTab === 'astrologers' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              
-              {/* Header & Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">Manage Astrologers</h1>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Create IDs, set chat/video availability and pricing, edit profiles
-                  </p>
-                </div>
-
-                <button
-                  onClick={openCreateModal}
-                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Astrologer ID</span>
-                </button>
-              </div>
-
-              {/* Filters & Search Bar */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
-                
-                {/* Search */}
-                <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, ID, or specialty..."
-                    value={astroSearch}
-                    onChange={e => setAstroSearch(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-rose-500"
-                  />
-                  {astroSearch && (
-                    <button onClick={() => setAstroSearch('')} className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Filters */}
-                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-                  <select
-                    value={astroStatusFilter}
-                    onChange={(e: any) => setAstroStatusFilter(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-rose-500 cursor-pointer"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="online">Online Only</option>
-                    <option value="offline">Offline Only</option>
-                    <option value="inactive">Deactivated Only</option>
-                  </select>
-
-                  <select
-                    value={astroSpecialtyFilter}
-                    onChange={e => setAstroSpecialtyFilter(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-rose-500 cursor-pointer"
-                  >
-                    <option value="all">All Specializations</option>
-                    {SPECIALIZATION_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Astrologers Table */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-                      <tr>
-                        <th className="py-3 px-4">Astrologer</th>
-                        <th className="py-3 px-3">Unique ID</th>
-                        <th className="py-3 px-3">Specialization</th>
-                        <th className="py-3 px-3">n8n Workflow</th>
-                        <th className="py-3 px-3">Availability</th>
-                        <th className="py-3 px-3">Pricing (/min)</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {filteredReaders.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="py-10 text-center text-slate-400 text-xs">
-                            No astrologers found matching your filters.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredReaders.map(reader => (
-                          <tr key={reader.id} className="hover:bg-slate-900/40 transition">
-                            
-                            {/* Photo & Name */}
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={reader.avatar || reader.image_url || DEFAULT_AVATARS[0]}
-                                  alt={reader.name}
-                                  className="w-10 h-10 rounded-xl object-cover border border-slate-800 shrink-0"
-                                />
-                                <div>
-                                  <div className="font-bold text-white text-sm">{reader.name}</div>
-                                  <div className="text-[11px] text-slate-400">{reader.experienceYears || reader.experience_years || 5} yrs exp</div>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Unique ID */}
-                            <td className="py-3 px-3 font-mono">
-                              <span className="px-2 py-0.5 rounded-md bg-slate-900 text-rose-300 border border-slate-800 font-bold text-[11px]">
-                                {reader.astroId || reader.id}
-                              </span>
-                            </td>
-
-                            {/* Specialization */}
-                            <td className="py-3 px-3 text-slate-300">
-                              <span className="px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 text-[11px]">
-                                {reader.specialties?.[0] || reader.specialities?.[0] || 'Vedic Astrology'}
-                              </span>
-                            </td>
-
-                            {/* n8n Workflow Automation: Individual ON/OFF Toggle + Assigned Workflow Mapping */}
-                            <td className="py-3 px-3">
-                              <div className="space-y-1.5 min-w-[145px]">
-                                {/* Individual ON/OFF Toggle Switch */}
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={reader.isWorkflowEnabled !== false}
-                                    onClick={(e) => handleToggleWorkflow(reader, e)}
-                                    title={reader.isWorkflowEnabled !== false ? 'Click to stop n8n workflow executions' : 'Click to enable n8n workflow executions'}
-                                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                                      reader.isWorkflowEnabled !== false ? 'bg-emerald-500' : 'bg-slate-800 border-slate-700'
-                                    }`}
-                                  >
-                                    <span
-                                      aria-hidden="true"
-                                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                                        reader.isWorkflowEnabled !== false ? 'translate-x-4' : 'translate-x-0'
-                                      }`}
-                                    />
-                                  </button>
-
-                                  <span className={`text-[11px] font-bold ${
-                                    reader.isWorkflowEnabled !== false ? 'text-emerald-400' : 'text-slate-400'
-                                  }`}>
-                                    {reader.isWorkflowEnabled !== false ? 'ON' : 'OFF'}
-                                  </span>
-                                  {reader.isWorkflowEnabled === false && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 font-semibold border border-amber-800/40">
-                                      Stopped
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Mapped Workflow ID Badge & Quick Configure */}
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <button
-                                    onClick={() => openWorkflowModal(reader)}
-                                    className="font-mono text-[10px] text-amber-300 bg-amber-950/30 hover:bg-amber-900/40 border border-amber-800/50 hover:border-amber-700 rounded px-1.5 py-0.5 inline-flex items-center gap-1 transition cursor-pointer"
-                                    title="View & test mapped n8n workflow"
-                                  >
-                                    <Workflow className="w-2.5 h-2.5 text-amber-400" />
-                                    <span className="truncate max-w-[95px]">{reader.n8nWorkflowId || (`wf_${reader.astroId || reader.id}`)}</span>
-                                  </button>
-
-                                  {typeof reader.n8nExecutionCount === 'number' && reader.n8nExecutionCount > 0 && (
-                                    <span className="text-[9px] font-mono text-slate-400" title={`Total executions: ${reader.n8nExecutionCount}`}>
-                                      ({reader.n8nExecutionCount})
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Availability (Chat / Video) */}
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
-                                  reader.isChatEnabled !== false
-                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
-                                    : 'bg-slate-900 text-slate-500 border border-slate-800'
-                                }`}>
-                                  <MessageSquare className="w-3 h-3" />
-                                  Chat
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
-                                  reader.isVideoEnabled !== false
-                                    ? 'bg-sky-950 text-sky-300 border border-sky-800/60'
-                                    : 'bg-slate-900 text-slate-500 border border-slate-800'
-                                }`}>
-                                  <Video className="w-3 h-3" />
-                                  Video
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* Pricing */}
-                            <td className="py-3 px-3 font-mono">
-                              <div className="text-white font-semibold">
-                                Chat: £{reader.ratePerMinute?.toFixed(2) || '1.75'}
-                              </div>
-                              <div className="text-[11px] text-slate-400">
-                                Video: £{reader.videoRatePerMinute?.toFixed(2) || '2.50'}
-                              </div>
-                            </td>
-
-                            {/* Online / Active Status Toggle */}
-                            <td className="py-3 px-3">
-                              <div className="space-y-1">
-                                <button
-                                  onClick={() => handleToggleOnline(reader)}
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                                    reader.isOnline
-                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
-                                      : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800'
-                                  }`}
-                                  title="Click to toggle online/offline"
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${reader.isOnline ? 'bg-emerald-400' : 'bg-slate-500'}`}></span>
-                                  {reader.isOnline ? 'Online' : 'Offline'}
-                                </button>
-                                
-                                {reader.isActive === false && (
-                                  <span className="inline-block text-[10px] font-bold text-rose-400">
-                                    Deactivated
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Actions */}
-                            <td className="py-3 px-4 text-right space-x-1.5">
-                              <button
-                                onClick={() => openWorkflowModal(reader)}
-                                className="p-1.5 text-slate-300 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title="Assign & test n8n workflow"
-                              >
-                                <Zap className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openEditModal(reader)}
-                                className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title="Edit astrologer profile"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setPasswordResetReader(reader);
-                                  setNewPasswordValue('');
-                                }}
-                                className="p-1.5 text-slate-300 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition cursor-pointer"
-                                title="Reset login password"
-                              >
-                                <KeyRound className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleToggleActive(reader)}
-                                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                  reader.isActive === false 
-                                    ? 'text-emerald-400 hover:bg-emerald-950/40' 
-                                    : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
-                                }`}
-                                title={reader.isActive === false ? 'Activate profile' : 'Deactivate profile'}
-                              >
-                                <ShieldCheck className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirmReader(reader)}
-                                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition cursor-pointer"
-                                title="Delete astrologer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ================================================================ */}
-          {/* 3. CHAT MANAGEMENT */}
-          {/* ================================================================ */}
-          {activeTab === 'chats' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">Chat Management</h1>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Monitor active consultations, assign pending requests, reassign without disrupting client experience
-                  </p>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
-                
-                <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Search by client, ID, or astrologer..."
-                    value={chatSearch}
-                    onChange={e => setChatSearch(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-rose-500"
-                  />
-                  {chatSearch && (
-                    <button onClick={() => setChatSearch('')} className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
-                  <button
-                    onClick={() => setChatStatusFilter('all')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      chatStatusFilter === 'all' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    All Live ({activeChatsList.length + pendingChatsList.length})
-                  </button>
-                  <button
-                    onClick={() => setChatStatusFilter('waiting')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      chatStatusFilter === 'waiting' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Pending ({pendingChatsList.length})
-                  </button>
-                  <button
-                    onClick={() => setChatStatusFilter('active')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      chatStatusFilter === 'active' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Active ({activeChatsList.length})
-                  </button>
-                  <button
-                    onClick={() => setChatStatusFilter('completed')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      chatStatusFilter === 'completed' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Completed
-                  </button>
-                </div>
-
-              </div>
-
-              {/* Chat Sessions Table */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-                      <tr>
-                        <th className="py-3 px-4">Client</th>
-                        <th className="py-3 px-3">Requested Astrologer</th>
-                        <th className="py-3 px-3">Assigned Handler</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3">Elapsed / Wait Time</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {filteredSessions.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-400 text-xs">
-                            No chat sessions found for the current selection.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredSessions.map(session => (
-                          <tr key={session.id} className="hover:bg-slate-900/40 transition">
-                            
-                            {/* Client */}
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-white text-sm">
-                                {session.customerName || 'Seeker'}
-                              </div>
-                              <div className="text-[10px] font-mono text-slate-400">
-                                #{session.id.slice(-6)}
-                              </div>
-                            </td>
-
-                            {/* Requested Astrologer (Identity client sees) */}
-                            <td className="py-3 px-3">
-                              <div className="font-medium text-slate-200">
-                                {session.requestedReaderName || 'Any Available'}
-                              </div>
-                              <span className="text-[10px] text-slate-400">
-                                Client sees this name
-                              </span>
-                            </td>
-
-                            {/* Assigned Handler */}
-                            <td className="py-3 px-3">
-                              <div className="font-medium text-white flex items-center gap-1.5">
-                                {session.assignedReaderName || (
-                                  <span className="text-amber-400 font-bold">Unassigned</span>
-                                )}
-                              </div>
-                              {session.assignmentType && session.assignmentType !== 'DIRECT' && (
-                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-slate-900 text-rose-300 border border-slate-800">
-                                  {session.assignmentType.replace('_', ' ')}
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Status */}
-                            <td className="py-3 px-3">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                session.status === 'active' 
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
-                                  : session.status === 'waiting'
-                                  ? 'bg-amber-950 text-amber-300 border border-amber-800 animate-pulse'
-                                  : 'bg-slate-900 text-slate-400 border border-slate-800'
-                              }`}>
-                                {session.status === 'waiting' ? 'Pending Pickup' : session.status.toUpperCase()}
-                              </span>
-                            </td>
-
-                            {/* Waiting / Duration Time */}
-                            <td className="py-3 px-3 font-mono">
-                              {session.status === 'waiting' ? (
-                                <span className="text-amber-400 font-bold">
-                                  {getWaitTimeText(session.createdAt)}
-                                </span>
-                              ) : session.status === 'active' ? (
-                                <span className="text-emerald-400 font-bold">
-                                  {getWaitTimeText(session.acceptedAt || session.createdAt)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Completed</span>
-                              )}
-                            </td>
-
-                            {/* Actions */}
-                            <td className="py-3 px-4 text-right space-x-2">
-                              {session.status === 'waiting' && (
-                                <button
-                                  onClick={() => handleAttendChatDirectly(session)}
-                                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer inline-flex items-center gap-1 shadow-sm"
-                                  title="Attend this chat consultation now"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  Attend
-                                </button>
-                              )}
-                              {session.status !== 'completed' && (
-                                <button
-                                  onClick={() => openTransferModal(session)}
-                                  className="px-3 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white font-bold text-xs transition cursor-pointer"
-                                >
-                                  {session.status === 'waiting' ? 'Assign' : 'Transfer'}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setViewTranscriptSession(session)}
-                                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition cursor-pointer"
-                              >
-                                {session.status === 'waiting' ? 'Attend / View' : 'View & Reply'}
-                              </button>
-                            </td>
-
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ================================================================ */}
-          {/* 4. CLIENTS MANAGEMENT */}
-          {/* ================================================================ */}
-          {activeTab === 'clients' && (
-            <div className="max-w-6xl mx-auto space-y-6">
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-xl font-bold text-white tracking-tight">Clients Management</h1>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    View registered clients, consultation volume, account status, and consultation transcripts
-                  </p>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
-                
-                <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Search client by name, ID, email, or phone..."
-                    value={clientSearch}
-                    onChange={e => setClientSearch(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-rose-500"
-                  />
-                  {clientSearch && (
-                    <button onClick={() => setClientSearch('')} className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <select
-                    value={clientStatusFilter}
-                    onChange={(e: any) => setClientStatusFilter(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-rose-500 cursor-pointer"
-                  >
-                    <option value="all">All Clients ({clients.length})</option>
-                    <option value="active">Active Consultations</option>
-                    <option value="free_tier">Free Tier</option>
-                  </select>
-                </div>
-
-              </div>
-
-              {/* Clients Table */}
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-                      <tr>
-                        <th className="py-3 px-4">Client Name</th>
-                        <th className="py-3 px-3">Unique ID</th>
-                        <th className="py-3 px-3">Contact (Email / Mobile)</th>
-                        <th className="py-3 px-3">Consultations</th>
-                        <th className="py-3 px-3">Account Status</th>
-                        <th className="py-3 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {filteredClients.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-10 text-center text-slate-400 text-xs">
-                            No clients found matching the search criteria.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredClients.map(client => (
-                          <tr key={client.id} className="hover:bg-slate-900/40 transition">
-                            
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-white text-sm flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-xs shrink-0">
-                                  {client.name?.[0] || 'S'}
-                                </div>
-                                <span>{client.name || 'Valued Seeker'}</span>
-                              </div>
-                            </td>
-
-                            <td className="py-3 px-3 font-mono">
-                              <span className="px-2 py-0.5 rounded-md bg-slate-900 text-slate-300 border border-slate-800 text-[11px]">
-                                {client.id}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <div className="text-slate-200 font-medium">{client.email || '—'}</div>
-                              <div className="text-[11px] text-slate-400 font-mono">{client.phone || '—'}</div>
-                            </td>
-
-                            <td className="py-3 px-3 font-semibold text-white">
-                              {client.totalConsultations || 0} sessions
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                client.accountStatus === 'active'
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                  : 'bg-sky-950 text-sky-300 border border-sky-800'
-                              }`}>
-                                {client.accountStatus === 'active' ? 'Active' : 'Free Tier'}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                onClick={() => openClientProfile(client)}
-                                className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
-                              >
-                                View Profile &amp; Chats
-                              </button>
-                            </td>
-
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ================================================================ */}
-          {/* 5. ESSENTIAL SETTINGS */}
-          {/* ================================================================ */}
-          {activeTab === 'settings' && (
-            <div className="max-w-4xl mx-auto space-y-6">
-              
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">Essential Platform Settings</h1>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Configure default pricing, astrologer availability rules, and free consultation parameters
-                </p>
-              </div>
-
-              <form onSubmit={handleSaveSettings} className="space-y-6">
-                
-                {/* Admin Portal Link & Access Permissions */}
-                <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-amber-400" />
-                      <div>
-                        <h2 className="text-sm font-bold text-white">Admin Command Center Link &amp; Access Control</h2>
-                        <p className="text-[11px] text-slate-400">Direct portal link and authorized credentials restriction</p>
+            {/* ------------------------------------------------------------- */}
+            {/* RIGHT PANE: SELECTED CONVERSATION DETAIL & LIVE CHAT (DETAIL) */}
+            {/* ------------------------------------------------------------- */}
+            <div className="flex-1 flex flex-col bg-[#0B0F1C]">
+              {selectedSession ? (
+                <>
+                  {/* Conversation Header */}
+                  <div className="p-4 border-b border-slate-800/80 bg-[#070A12]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <h3 className="text-base font-bold text-white tracking-tight">
+                          {selectedSession.customerName || 'Valued Seeker'}
+                        </h3>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          selectedSession.status === 'waiting'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                            : selectedSession.status === 'active'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {selectedSession.status === 'waiting' ? 'Pending Pickup' : selectedSession.status}
+                        </span>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
+                        <span>ID: <code className="text-slate-300 font-mono">{selectedSession.id}</code></span>
+                        <span>•</span>
+                        <span>Topic: <strong className="text-slate-200">{selectedSession.topic || selectedSession.readingType || 'Guidance'}</strong></span>
+                        <span>•</span>
+                        <span>Handler: <strong className="text-amber-300">{selectedSession.assignedReaderName || selectedSession.requestedReaderName}</strong></span>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase">
-                      Admin Protected
-                    </span>
+
+                    {/* Quick Session Actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleOpenReassignModal(selectedSession)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 text-indigo-300 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                        <span>Reassign</span>
+                      </button>
+
+                      {selectedSession.status !== 'completed' && (
+                        <button
+                          onClick={() => handleCompleteSession(selectedSession)}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Complete</span>
+                        </button>
+                      )}
+                    </div>
+
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Direct Admin Link</span>
-                      <div className="flex items-center gap-2">
-                        <code className="text-amber-300 font-mono font-bold text-xs bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 flex-1 truncate">
-                          admin/lumsic.online
-                        </code>
+                  {/* Customer Birth Details Strip */}
+                  {selectedSession.birthDetails && (
+                    <div className="px-4 py-2 bg-slate-900/60 border-b border-slate-800/80 flex flex-wrap items-center gap-4 text-xs text-slate-300">
+                      <span className="text-slate-400 font-medium">Birth Chart Details:</span>
+                      <span>DOB: <strong className="text-white">{selectedSession.birthDetails.dob || 'Not specified'}</strong></span>
+                      <span>Time: <strong className="text-white">{selectedSession.birthDetails.birthTime || 'Not known'}</strong></span>
+                      <span>POB: <strong className="text-white">{selectedSession.birthDetails.placeOfBirth || 'Not specified'}</strong></span>
+                      <span>Gender: <strong className="text-white">{selectedSession.birthDetails.gender || 'Not specified'}</strong></span>
+                    </div>
+                  )}
+
+                  {/* Chat Messages Feed */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+                    {(selectedSession.messages && selectedSession.messages.length > 0) ? (
+                      selectedSession.messages.map((msg, index) => {
+                        const isCustomer = msg.sender === 'customer';
+                        const isSystem = msg.sender === 'system' || msg.isSystemNotice;
+
+                        if (isSystem) {
+                          return (
+                            <div key={msg.id || index} className="flex justify-center my-2">
+                              <span className="text-[11px] bg-slate-900/80 border border-slate-800 text-slate-400 px-3 py-1 rounded-full text-center">
+                                {msg.text}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={msg.id || index}
+                            className={`flex flex-col ${isCustomer ? 'items-start' : 'items-end'}`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1 px-1">
+                              <span className="text-[11px] font-bold text-slate-400">
+                                {isCustomer ? (selectedSession.customerName || 'Seeker') : (msg.senderName || 'Astrologer / Admin')}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+
+                            <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed whitespace-pre-line shadow-md ${
+                              isCustomer
+                                ? 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-sm'
+                                : 'bg-gradient-to-r from-amber-600/90 to-amber-700/90 text-white rounded-tr-sm font-medium'
+                            }`}>
+                              {msg.text}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                        No messages in this conversation yet.
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Quick Template Chips */}
+                  <div className="px-4 py-2 border-t border-slate-800/80 bg-[#070A12]/40 flex items-center gap-2 overflow-x-auto">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider shrink-0">Quick Replies:</span>
+                    {[
+                      'Welcome to LUMSIC! I am connecting to your celestial energies now.',
+                      'Please give me a moment to analyze your astrological chart and houses.',
+                      'I see powerful alignment around your career and relationships this cycle.',
+                      'Thank you for consulting with us. May the cosmic light guide you.'
+                    ].map((template, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setReplyText(template)}
+                        className="text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg border border-slate-800 shrink-0 transition cursor-pointer"
+                      >
+                        {template.substring(0, 32)}...
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Reply Input Box */}
+                  <div className="p-3 border-t border-slate-800/80 bg-[#070A12] flex items-center gap-2">
+                    <textarea
+                      rows={1}
+                      placeholder={`Reply as ${selectedSession.assignedReaderName || 'Astrologer Admin'}...`}
+                      value={replyText}
+                      onChange={e => setReplyText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAdminSendReply();
+                        }
+                      }}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none"
+                    />
+                    <button
+                      onClick={handleAdminSendReply}
+                      disabled={!replyText.trim() || isSendingReply}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer shrink-0"
+                    >
+                      <span>Send</span>
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                </>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500">
+                  <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
+                  <h4 className="text-sm font-semibold text-slate-300">No Conversation Selected</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mt-1">
+                    Select a conversation from the left to read full transcript, inspect birth chart details, and reply directly.
+                  </p>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 3: CHAT MANAGEMENT (DETAILED OPERATIONAL TABLE) */}
+        {/* =================================================================== */}
+        {activeTab === 'chats' && (
+          <div className="space-y-4">
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">All Customer Conversations</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Comprehensive audit table across all readers, channels, and AI workflows</p>
+              </div>
+
+              {/* Status Filters */}
+              <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setInboxStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    inboxStatusFilter === 'all' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All ({sessions.length})
+                </button>
+                <button
+                  onClick={() => setInboxStatusFilter('waiting')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    inboxStatusFilter === 'waiting' ? 'bg-amber-400 text-slate-950' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Pending ({stats.pending})
+                </button>
+                <button
+                  onClick={() => setInboxStatusFilter('active')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    inboxStatusFilter === 'active' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Active ({stats.active})
+                </button>
+                <button
+                  onClick={() => setInboxStatusFilter('completed')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    inboxStatusFilter === 'completed' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Completed
+                </button>
+              </div>
+            </div>
+
+            {/* Table Container */}
+            <div className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900/90 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">Customer</th>
+                      <th className="py-3 px-3">Topic / Type</th>
+                      <th className="py-3 px-3">Astrologer</th>
+                      <th className="py-3 px-3">Status</th>
+                      <th className="py-3 px-3">Elapsed / Wait Time</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {filteredInboxSessions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-500">
+                          No customer conversations found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredInboxSessions.map(sess => (
+                        <tr key={sess.id} className="hover:bg-slate-900/40 transition">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-white">{sess.customerName || 'Seeker'}</div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {sess.id}</div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className="text-slate-200 font-medium">{sess.topic || 'General Consultation'}</span>
+                            <div className="text-[10px] text-slate-400">{sess.readingType || 'Vedic Astrology'}</div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className="text-amber-300 font-medium">{sess.assignedReaderName || sess.requestedReaderName || 'Psychic Tamara'}</span>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              sess.status === 'active'
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : sess.status === 'waiting'
+                                ? 'bg-amber-400/15 text-amber-300 border border-amber-400/30 animate-pulse'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {sess.status === 'waiting' ? 'Pending' : sess.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3 text-slate-400 font-mono">
+                            {getElapsedText(sess.createdAt)}
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSessionId(sess.id);
+                                setActiveTab('inbox');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-semibold transition cursor-pointer"
+                            >
+                              Open & Reply
+                            </button>
+                            <button
+                              onClick={() => handleOpenReassignModal(sess)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                            >
+                              Reassign
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 4: ASTROLOGER MANAGEMENT */}
+        {/* =================================================================== */}
+        {activeTab === 'astrologers' && (
+          <div className="space-y-5">
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Astrologer Directory & Workstation Control</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Monitor active astrologers, manage workflow toggles, and inspect workload</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-xl">
+                  {stats.onlineAstrologers} of {readers.length} Online
+                </span>
+              </div>
+            </div>
+
+            {/* Astrologers Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {readers.map(reader => {
+                const assignedChats = sessions.filter(s => s.assignedReaderId === reader.id || s.requestedReaderId === reader.id);
+                const activeCount = assignedChats.filter(s => s.status === 'active').length;
+                const completedCount = assignedChats.filter(s => s.status === 'completed').length;
+
+                return (
+                  <div 
+                    key={reader.id}
+                    className="bg-[#0B0F1C] border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition shadow-sm"
+                  >
+                    <div>
+                      {/* Top Bar: Avatar, Name, ID, Online Toggle */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <img 
+                              src={reader.avatar} 
+                              alt={reader.name} 
+                              className="w-12 h-12 rounded-xl object-cover border border-slate-700" 
+                            />
+                            <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#0B0F1C] ${
+                              reader.isOnline ? 'bg-emerald-500' : 'bg-slate-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-white">{reader.name}</h4>
+                            <span className="text-[10px] text-slate-400 font-mono">{reader.astroId || reader.id}</span>
+                            <div className="text-[11px] text-amber-400 font-medium mt-0.5">{(reader as any).specialization || reader.category || reader.title}</div>
+                          </div>
+                        </div>
+
+                        {/* Online/Offline Toggle Button */}
                         <button
-                          type="button"
-                          onClick={() => {
-                            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lumsic.online';
-                            navigator.clipboard.writeText(`${origin}/admin/lumsic.online`);
-                            showToast('Admin link copied to clipboard!');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition cursor-pointer shrink-0 shadow"
+                          onClick={() => handleToggleReader(reader.id, Boolean(reader.isOnline))}
+                          className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition cursor-pointer border ${
+                            reader.isOnline
+                              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25'
+                              : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:bg-slate-800'
+                          }`}
                         >
-                          Copy Link
+                          {reader.isOnline ? 'Online' : 'Offline'}
                         </button>
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        When this link is opened in any browser, the Admin Command Center opens directly and prompts for administrator credentials.
+
+                      {/* Bio snippet */}
+                      <p className="text-xs text-slate-400 line-clamp-2 mt-3 leading-relaxed">
+                        {reader.bio || `${reader.experienceYears}+ years experience in spiritual guidance.`}
                       </p>
-                    </div>
 
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Who Can Log In</span>
-                      <div className="text-xs text-white font-medium">
-                        Owner / Super Admin: <span className="text-amber-300 font-mono font-bold">bankush014@gmail.com</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Access is restricted exclusively to authorized admin credentials. Unauthorized accounts are blocked. Use the top bar &ldquo;Admin Access Control&rdquo; button to grant or revoke login permissions for any team member.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pricing Defaults */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <Sparkles className="w-4 h-4 text-rose-400" />
-                    <h2 className="text-sm font-bold text-white">Default Consultation Pricing</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">
-                        Default Chat Pricing (£ per minute)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0.50"
-                        max="10.00"
-                        value={settingsData.defaultChatPrice}
-                        onChange={e => setSettingsData({ ...settingsData, defaultChatPrice: parseFloat(e.target.value) || 1.50 })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                      />
-                      <span className="text-[11px] text-slate-400 mt-1 block">Default rate for newly created astrologers</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">
-                        Default Video Call Pricing (£ per minute)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0.50"
-                        max="10.00"
-                        value={settingsData.defaultVideoPrice}
-                        onChange={e => setSettingsData({ ...settingsData, defaultVideoPrice: parseFloat(e.target.value) || 2.50 })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                      />
-                      <span className="text-[11px] text-slate-400 mt-1 block">Default per-minute rate for video consultations</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Astrologer Availability Rules */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <Users className="w-4 h-4 text-sky-400" />
-                    <h2 className="text-sm font-bold text-white">Astrologer Availability &amp; Assignment</h2>
-                  </div>
-
-                  <div className="space-y-4 text-xs">
-                    <label className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
-                      <div>
-                        <div className="font-bold text-white">Automatic Chat Assignment Engine</div>
-                        <div className="text-[11px] text-slate-400">Route unassigned chat requests automatically to available on-duty astrologers</div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={settingsData.autoAssignEnabled}
-                        onChange={e => setSettingsData({ ...settingsData, autoAssignEnabled: e.target.checked })}
-                        className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                      />
-                    </label>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1.5">
-                          Max Concurrent Chats per Astrologer
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="10"
-                          value={settingsData.maxChatsPerAstrologer}
-                          onChange={e => setSettingsData({ ...settingsData, maxChatsPerAstrologer: parseInt(e.target.value) || 3 })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                        />
-                      </div>
-
-                      <label className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
-                        <div>
-                          <div className="font-bold text-white">Online Only Assignment</div>
-                          <div className="text-[11px] text-slate-400">Strictly exclude offline or busy astrologers</div>
+                      {/* Workload Stats */}
+                      <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-800/60">
+                        <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">Active Consultations</span>
+                          <span className="text-sm font-bold text-emerald-400">{activeCount}</span>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={settingsData.onlineOnly}
-                          onChange={e => setSettingsData({ ...settingsData, onlineOnly: e.target.checked })}
-                          className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Free First-Chat Configuration */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <Clock className="w-4 h-4 text-amber-400" />
-                    <h2 className="text-sm font-bold text-white">Complimentary First Chat Program</h2>
-                  </div>
-
-                  <div className="space-y-4 text-xs">
-                    <label className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
-                      <div>
-                        <div className="font-bold text-white">Enable Free First Chat for New Seekers</div>
-                        <div className="text-[11px] text-slate-400">First-time visitors receive a complimentary timed reading</div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={settingsData.freeChatEnabled}
-                        onChange={e => setSettingsData({ ...settingsData, freeChatEnabled: e.target.checked })}
-                        className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                      />
-                    </label>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">
-                        Free Session Duration (Minutes)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={settingsData.freeChatMinutes}
-                        onChange={e => setSettingsData({ ...settingsData, freeChatMinutes: parseInt(e.target.value) || 2 })}
-                        className="w-full sm:w-48 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                      />
-                      <span className="text-[11px] text-slate-400 mt-1 block">Standard complimentary duration is 2 minutes (120 seconds)</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Admin Profile & Security Settings */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-bold text-white">Admin Profile &amp; Security</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">Admin Display Name</label>
-                      <input
-                        type="text"
-                        value={settingsData.adminName}
-                        onChange={e => setSettingsData({ ...settingsData, adminName: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">Admin Contact Email</label>
-                      <input
-                        type="email"
-                        value={settingsData.adminEmail}
-                        readOnly
-                        className="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* n8n Automation Engine Hub */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Workflow className="w-4 h-4 text-amber-400" />
-                      <div>
-                        <h2 className="text-sm font-bold text-white">n8n Automation Engine Hub</h2>
-                        <p className="text-[11px] text-slate-400">Configure global endpoint and authentication for astrologer backend workflows</p>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Real Backend Connected
-                    </span>
-                  </div>
-
-                  <div className="space-y-4 text-xs">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1.5">
-                          n8n Base URL / Server Host
-                        </label>
-                        <input
-                          type="url"
-                          placeholder="https://n8n.webhook.internal or https://your-instance.app.n8n.cloud"
-                          value={n8nConfig.baseUrl}
-                          onChange={e => setN8nConfig({ ...n8nConfig, baseUrl: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
-                        />
-                        <span className="text-[10px] text-slate-400 mt-1 block">Root URL where astrologer webhooks are hosted</span>
+                        <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                          <span className="text-[10px] text-slate-500 block">Completed</span>
+                          <span className="text-sm font-bold text-slate-300">{completedCount}</span>
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1.5">
-                          Default Webhook Path
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="/webhook/astrologer-chat"
-                          value={n8nConfig.defaultWebhookPath}
-                          onChange={e => setN8nConfig({ ...n8nConfig, defaultWebhookPath: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
-                        />
-                        <span className="text-[10px] text-slate-400 mt-1 block">Appended to Base URL when astrologer has no custom URL</span>
+                      {/* Automated Workflow Toggle */}
+                      <div className="mt-3 flex items-center justify-between p-2 rounded-xl bg-slate-900/40 border border-slate-800/60">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                          <Zap className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Automation Workflow</span>
+                        </div>
+                        <button
+                          onClick={() => handleToggleWorkflow(reader.id, reader.isWorkflowEnabled !== false)}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition ${
+                            reader.isWorkflowEnabled !== false
+                              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                              : 'bg-slate-800 text-slate-500 border border-slate-700'
+                          }`}
+                        >
+                          {reader.isWorkflowEnabled !== false ? 'Enabled' : 'Disabled'}
+                        </button>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1.5">
-                        n8n API Key / Bearer Token (Optional)
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="n8n_api_key_..."
-                        value={n8nConfig.apiKey}
-                        onChange={e => setN8nConfig({ ...n8nConfig, apiKey: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
-                      />
-                      <span className="text-[10px] text-slate-400 mt-1 block">Sent in Authorization header if required by your n8n workflow triggers</span>
-                    </div>
-
-                    <div className="flex justify-end pt-1">
+                    {/* Bottom Action */}
+                    <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-mono">£{reader.ratePerMinute?.toFixed(2)}/min</span>
                       <button
-                        type="button"
-                        onClick={handleSaveN8nConfig}
-                        disabled={actionLoading}
-                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                        onClick={() => {
+                          setInboxAstrologerFilter(reader.id);
+                          setActiveTab('inbox');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1"
                       >
-                        {actionLoading ? 'Saving...' : 'Save n8n Config'}
+                        <span>View Chats</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
+
                   </div>
-                </div>
-
-                {/* Save Button */}
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={actionLoading}
-                    className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/20 transition cursor-pointer disabled:opacity-50"
-                  >
-                    {actionLoading ? 'Saving...' : 'Save Settings'}
-                  </button>
-                </div>
-
-              </form>
-
+                );
+              })}
             </div>
-          )}
-
-        </main>
-      </div>
-
-      {/* =================================================================== */}
-      {/* MODAL 1: CREATE ASTROLOGER ID */}
-      {/* =================================================================== */}
-      {createModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-            
-            {/* Sticky Header with prominent Back Button */}
-            <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setCreateModalOpen(false)}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-300 hover:text-white border border-slate-700/80 text-xs font-bold cursor-pointer transition shadow-md active:scale-95"
-                  title="Back to astrologers list"
-                >
-                  <ArrowLeft className="w-4 h-4 text-rose-400" />
-                  <span>Back to Astrologers</span>
-                </button>
-                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
-                <div className="flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-rose-500" />
-                  <h3 className="text-sm sm:text-base font-bold text-white">Create New Astrologer ID</h3>
-                </div>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setCreateModalOpen(false)} 
-                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 cursor-pointer transition"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateAstrologer} className="flex-1 overflow-y-auto flex flex-col justify-between">
-              <div className="p-5 sm:p-7 space-y-6 text-xs">
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Sarah Moon"
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Unique Astrologer ID *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. LYS-10025"
-                    value={formData.astroId}
-                    onChange={e => setFormData({ ...formData, astroId: e.target.value.toUpperCase() })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-rose-300 font-mono font-bold focus:outline-none focus:border-rose-500"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Must be unique across all readers</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Login Email *</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="sarah@lumsic.com"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Mobile Phone (Optional)</label>
-                  <input
-                    type="tel"
-                    placeholder="+44 7700 900142"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Specialization</label>
-                  <select
-                    value={formData.specialization}
-                    onChange={e => setFormData({ ...formData, specialization: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 cursor-pointer"
-                  >
-                    {SPECIALIZATION_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Experience (Years)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={formData.experienceYears}
-                    onChange={e => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 5 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-              </div>
-
-              {/* Pricing */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Per-Minute Chat Price (£)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.50"
-                    max="10.00"
-                    value={formData.ratePerMinute}
-                    onChange={e => setFormData({ ...formData, ratePerMinute: parseFloat(e.target.value) || 1.75 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Per-Minute Video Call Price (£)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.50"
-                    max="10.00"
-                    value={formData.videoRatePerMinute}
-                    onChange={e => setFormData({ ...formData, videoRatePerMinute: parseFloat(e.target.value) || 2.50 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Availability Toggles */}
-              <div className="grid grid-cols-2 gap-3.5 p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isChatEnabled}
-                    onChange={e => setFormData({ ...formData, isChatEnabled: e.target.checked })}
-                    className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                  />
-                  <span className="font-semibold text-slate-200">Chat Consultation Enabled</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isVideoEnabled}
-                    onChange={e => setFormData({ ...formData, isVideoEnabled: e.target.checked })}
-                    className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                  />
-                  <span className="font-semibold text-slate-200">Video Call Enabled</span>
-                </label>
-              </div>
-
-              {/* n8n Backend Workflow Automation Mapping */}
-              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Workflow className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-white text-xs">n8n Backend Workflow Automation</span>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isWorkflowEnabled}
-                      onChange={e => setFormData({ ...formData, isWorkflowEnabled: e.target.checked })}
-                      className="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-700 cursor-pointer"
-                    />
-                    <span className={`text-[11px] font-bold ${formData.isWorkflowEnabled ? 'text-emerald-400' : 'text-slate-400'}`}>
-                      {formData.isWorkflowEnabled ? 'ON (Active)' : 'OFF (Stopped)'}
-                    </span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Assigned Workflow ID</label>
-                    <input
-                      type="text"
-                      placeholder={`wf_${formData.astroId || 'LYS-10001'}`}
-                      value={formData.n8nWorkflowId}
-                      onChange={e => setFormData({ ...formData, n8nWorkflowId: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Mapped to this astrologer ID</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Workflow Title</label>
-                    <input
-                      type="text"
-                      placeholder={`Consultation Flow - ${formData.astroId || 'LYS-10001'}`}
-                      value={formData.n8nWorkflowName}
-                      onChange={e => setFormData({ ...formData, n8nWorkflowName: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Custom n8n Webhook URL (Optional)</label>
-                  <input
-                    type="url"
-                    placeholder="https://n8n.your-domain.com/webhook/flow (leave blank for default)"
-                    value={formData.n8nWebhookUrl}
-                    onChange={e => setFormData({ ...formData, n8nWebhookUrl: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Profile Photo Upload (Pure Device Upload ONLY - No URL Input) */}
-              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-rose-400" />
-                    <span className="font-bold text-white text-sm">Astrologer Profile Photo</span>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live Website Update
-                  </span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pt-1">
-                  {/* Live Thumbnail Preview */}
-                  <div className="relative group shrink-0">
-                    <img
-                      src={formData.avatar || DEFAULT_AVATARS[0]}
-                      alt="Profile preview"
-                      className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover border-2 border-rose-500/60 shadow-xl shadow-black/80 bg-slate-950"
-                      onError={(e: any) => { e.target.src = DEFAULT_AVATARS[0]; }}
-                    />
-                    {uploadingImage && (
-                      <div className="absolute inset-0 rounded-2xl bg-black/80 flex flex-col items-center justify-center backdrop-blur-xs gap-1.5">
-                        <RefreshCw className="w-6 h-6 text-rose-400 animate-spin" />
-                        <span className="text-[10px] font-bold text-rose-200">Uploading...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Device File Upload Control ONLY (No URL input) */}
-                  <div className="flex-1 w-full space-y-3 text-center sm:text-left">
-                    <div>
-                      <h4 className="text-sm font-bold text-white mb-1">
-                        Upload Astrologer Photo
-                      </h4>
-                      <p className="text-slate-400 text-xs leading-relaxed">
-                        Select a photo directly from your device. It uploads immediately and reflects live on the consumer website in real time.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
-                      <label className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/30 transition active:scale-95">
-                        <Upload className="w-4 h-4" />
-                        <span>{uploadingImage ? 'Uploading Image...' : 'Upload Image from Device'}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingImage}
-                          onChange={handleImageFileChange}
-                          className="hidden"
-                        />
-                      </label>
-
-                      {formData.avatar && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 text-slate-300 border border-slate-800 text-[11px] font-medium">
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Photo ready</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-[11px] text-slate-500 flex items-center justify-center sm:justify-start gap-2 pt-0.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>Supports JPG, PNG, WEBP, GIF up to 10MB</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bio */}
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Bio / Profile Description</label>
-                <textarea
-                  rows={3}
-                  value={formData.bio}
-                  onChange={e => setFormData({ ...formData, bio: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 text-xs leading-relaxed"
-                  placeholder="Dedicated intuitive counselor..."
-                />
-              </div>
-
-              {/* Initial Password */}
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Initial Password (Optional)</label>
-                <input
-                  type="password"
-                  placeholder="Leave empty to require password setup on first login"
-                  value={formData.password}
-                  onChange={e => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                />
-              </div>
-
-              </div>
-
-              {/* Sticky Footer with prominent Back Button */}
-              <div className="sticky bottom-0 z-30 bg-slate-950/95 backdrop-blur-md px-5 sm:px-6 py-4 border-t border-slate-800 flex items-center justify-between shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setCreateModalOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold cursor-pointer transition shadow-sm active:scale-95"
-                >
-                  <ArrowLeft className="w-4 h-4 text-rose-400" />
-                  <span>Back to Astrologers</span>
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCreateModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={actionLoading || uploadingImage}
-                    className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer disabled:opacity-50 transition shadow-lg shadow-rose-600/25 active:scale-95 flex items-center gap-2"
-                  >
-                    {actionLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Creating...</span>
-                      </>
-                    ) : (
-                      <span>Create Astrologer</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-            </form>
 
           </div>
-        </div>
-      )}
+        )}
 
-      {/* =================================================================== */}
-      {/* MODAL 2: EDIT ASTROLOGER PROFILE */}
-      {/* =================================================================== */}
-      {editModalOpen && editingReader && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      </main>
+
+      {/* ===================================================================== */}
+      {/* REASSIGN ASTROLOGER MODAL */}
+      {/* ===================================================================== */}
+      {reassignModalOpen && sessionToReassign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#0B0F1C] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
             
-            {/* Sticky Header with prominent Back Button */}
-            <div className="sticky top-0 z-30 bg-slate-950/95 backdrop-blur-md px-5 sm:px-6 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setEditModalOpen(false);
-                    setEditingReader(null);
-                  }}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-rose-300 hover:text-white border border-slate-700/80 text-xs font-bold cursor-pointer transition shadow-md active:scale-95"
-                  title="Back to astrologers list"
-                >
-                  <ArrowLeft className="w-4 h-4 text-rose-400" />
-                  <span>Back to Astrologers</span>
-                </button>
-                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
-                <div className="flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-rose-500" />
-                  <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-[200px] sm:max-w-md">
-                    Edit Astrologer: <span className="text-rose-400">{editingReader.name}</span>
-                  </h3>
-                  <span className="hidden md:inline-block px-2 py-0.5 rounded-md bg-slate-900 text-rose-300 border border-slate-800 font-mono text-[10px] font-bold">
-                    {editingReader.astroId || editingReader.id}
-                  </span>
-                </div>
-              </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  setEditModalOpen(false);
-                  setEditingReader(null);
-                }} 
-                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 cursor-pointer transition"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateAstrologer} className="flex-1 overflow-y-auto flex flex-col justify-between">
-              <div className="p-5 sm:p-7 space-y-6 text-xs">
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Unique Astrologer ID</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.astroId}
-                    onChange={e => setFormData({ ...formData, astroId: e.target.value.toUpperCase() })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-rose-300 font-mono font-bold focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Login Email</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Mobile Phone</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Specialization</label>
-                  <select
-                    value={formData.specialization}
-                    onChange={e => setFormData({ ...formData, specialization: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 cursor-pointer"
-                  >
-                    {SPECIALIZATION_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Experience (Years)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={formData.experienceYears}
-                    onChange={e => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 5 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-              </div>
-
-              {/* Pricing */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Per-Minute Chat Rate (£)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.50"
-                    max="10.00"
-                    value={formData.ratePerMinute}
-                    onChange={e => setFormData({ ...formData, ratePerMinute: parseFloat(e.target.value) || 1.75 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Per-Minute Video Rate (£)</label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0.50"
-                    max="10.00"
-                    value={formData.videoRatePerMinute}
-                    onChange={e => setFormData({ ...formData, videoRatePerMinute: parseFloat(e.target.value) || 2.50 })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Availability Toggles */}
-              <div className="grid grid-cols-2 gap-3.5 p-3 rounded-xl bg-slate-900 border border-slate-800">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isChatEnabled}
-                    onChange={e => setFormData({ ...formData, isChatEnabled: e.target.checked })}
-                    className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                  />
-                  <span className="font-semibold text-slate-200">Chat Enabled</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isVideoEnabled}
-                    onChange={e => setFormData({ ...formData, isVideoEnabled: e.target.checked })}
-                    className="w-4 h-4 text-rose-600 rounded bg-slate-800 border-slate-700"
-                  />
-                  <span className="font-semibold text-slate-200">Video Call Enabled</span>
-                </label>
-              </div>
-
-              {/* n8n Backend Workflow Automation Mapping */}
-              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Workflow className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-white text-xs">n8n Backend Workflow Automation</span>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isWorkflowEnabled}
-                      onChange={e => setFormData({ ...formData, isWorkflowEnabled: e.target.checked })}
-                      className="w-4 h-4 text-emerald-500 rounded bg-slate-800 border-slate-700 cursor-pointer"
-                    />
-                    <span className={`text-[11px] font-bold ${formData.isWorkflowEnabled ? 'text-emerald-400' : 'text-slate-400'}`}>
-                      {formData.isWorkflowEnabled ? 'ON (Active)' : 'OFF (Stopped)'}
-                    </span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Assigned Workflow ID</label>
-                    <input
-                      type="text"
-                      placeholder={`wf_${formData.astroId || 'LYS-10001'}`}
-                      value={formData.n8nWorkflowId}
-                      onChange={e => setFormData({ ...formData, n8nWorkflowId: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Mapped to this astrologer ID</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Workflow Title</label>
-                    <input
-                      type="text"
-                      placeholder={`Consultation Flow - ${formData.astroId || 'LYS-10001'}`}
-                      value={formData.n8nWorkflowName}
-                      onChange={e => setFormData({ ...formData, n8nWorkflowName: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Custom n8n Webhook URL (Optional)</label>
-                  <input
-                    type="url"
-                    placeholder="https://n8n.your-domain.com/webhook/flow (leave blank for default)"
-                    value={formData.n8nWebhookUrl}
-                    onChange={e => setFormData({ ...formData, n8nWebhookUrl: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Profile Photo Upload (Pure Device Upload ONLY - No URL Input) */}
-              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-rose-400" />
-                    <span className="font-bold text-white text-sm">Astrologer Profile Photo</span>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live Website Update
-                  </span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 pt-1">
-                  {/* Live Thumbnail Preview */}
-                  <div className="relative group shrink-0">
-                    <img
-                      src={formData.avatar || DEFAULT_AVATARS[0]}
-                      alt="Profile preview"
-                      className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover border-2 border-rose-500/60 shadow-xl shadow-black/80 bg-slate-950"
-                      onError={(e: any) => { e.target.src = DEFAULT_AVATARS[0]; }}
-                    />
-                    {uploadingImage && (
-                      <div className="absolute inset-0 rounded-2xl bg-black/80 flex flex-col items-center justify-center backdrop-blur-xs gap-1.5">
-                        <RefreshCw className="w-6 h-6 text-rose-400 animate-spin" />
-                        <span className="text-[10px] font-bold text-rose-200">Uploading...</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Device File Upload Control ONLY (No URL input) */}
-                  <div className="flex-1 w-full space-y-3 text-center sm:text-left">
-                    <div>
-                      <h4 className="text-sm font-bold text-white mb-1">
-                        {formData.avatar ? 'Change Astrologer Photo' : 'Upload Astrologer Photo'}
-                      </h4>
-                      <p className="text-slate-400 text-xs leading-relaxed">
-                        Select a photo directly from your device. It uploads immediately and reflects live on the consumer website in real time.
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
-                      <label className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/30 transition active:scale-95">
-                        <Upload className="w-4 h-4" />
-                        <span>{uploadingImage ? 'Uploading Image...' : 'Upload Image from Device'}</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingImage}
-                          onChange={handleImageFileChange}
-                          className="hidden"
-                        />
-                      </label>
-
-                      {formData.avatar && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 text-slate-300 border border-slate-800 text-[11px] font-medium">
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Photo active on live site</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-[11px] text-slate-500 flex items-center justify-center sm:justify-start gap-2 pt-0.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>Supports JPG, PNG, WEBP, GIF up to 10MB</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bio */}
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Bio / Profile Description</label>
-                <textarea
-                  rows={3}
-                  value={formData.bio}
-                  onChange={e => setFormData({ ...formData, bio: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 text-xs leading-relaxed"
-                  placeholder="Dedicated intuitive counselor..."
-                />
-              </div>
-
-              </div>
-
-              {/* Sticky Footer with prominent Back Button */}
-              <div className="sticky bottom-0 z-30 bg-slate-950/95 backdrop-blur-md px-5 sm:px-6 py-4 border-t border-slate-800 flex items-center justify-between shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditModalOpen(false);
-                    setEditingReader(null);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold cursor-pointer transition shadow-sm active:scale-95"
-                >
-                  <ArrowLeft className="w-4 h-4 text-rose-400" />
-                  <span>Back to Astrologers</span>
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditModalOpen(false);
-                      setEditingReader(null);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={actionLoading || uploadingImage}
-                    className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer disabled:opacity-50 transition shadow-lg shadow-rose-600/25 active:scale-95 flex items-center gap-2"
-                  >
-                    {actionLoading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Saving Changes...</span>
-                      </>
-                    ) : (
-                      <span>Save Changes</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* MODAL 3: DELETE CONFIRMATION DIALOG */}
-      {/* =================================================================== */}
-      {deleteConfirmReader && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-rose-900/50 rounded-2xl w-full max-w-md p-6 space-y-4 text-xs shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-950 border border-rose-800 flex items-center justify-center text-rose-400 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">Delete Astrologer Profile?</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-slate-300 bg-slate-900 p-3 rounded-xl border border-slate-800">
-              Are you sure you want to permanently delete <strong className="text-white">{deleteConfirmReader.name}</strong> (ID: <span className="font-mono text-rose-300">{deleteConfirmReader.astroId || deleteConfirmReader.id}</span>)?
-            </p>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmReader(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAstrologer}
-                disabled={actionLoading}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer disabled:opacity-50"
-              >
-                {actionLoading ? 'Deleting...' : 'Confirm Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* MODAL 4: PASSWORD RESET / CREDENTIALS ASSIGNMENT */}
-      {/* =================================================================== */}
-      {passwordResetReader && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 text-xs shadow-2xl">
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-white">Reset Astrologer Password</h3>
+                <ArrowRightLeft className="w-4 h-4 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Reassign Consultation</h3>
               </div>
-              <button onClick={() => setPasswordResetReader(null)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button 
+                onClick={() => setReassignModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-slate-300">
-              Assign a new secure password for <strong className="text-white">{passwordResetReader.name}</strong> ({passwordResetReader.astroId}).
+            <p className="text-xs text-slate-400 mb-4">
+              Reassign consultation with <strong className="text-white">{sessionToReassign.customerName}</strong> to another qualified astrologer on the platform.
             </p>
 
-            <form onSubmit={handleResetPassword} className="space-y-3.5">
+            <div className="space-y-4">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">New Password</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter new password (min 6 chars)"
-                  value={newPasswordValue}
-                  onChange={e => setNewPasswordValue(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 font-mono"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setPasswordResetReader(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading || !newPasswordValue.trim()}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold cursor-pointer disabled:opacity-50"
-                >
-                  {actionLoading ? 'Updating...' : 'Set Password'}
-                </button>
-              </div>
-            </form>
-
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* MODAL 5: CHAT REASSIGN / TRANSFER MODAL */}
-      {/* =================================================================== */}
-      {transferModalOpen && selectedSessionToTransfer && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 text-xs shadow-2xl">
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-rose-500" />
-                <h3 className="text-sm font-bold text-white">Transfer / Assign Consultation</h3>
-              </div>
-              <button onClick={() => setTransferModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Client:</span>
-                <span className="font-bold text-white">{selectedSessionToTransfer.customerName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Client-Facing Astrologer:</span>
-                <span className="font-bold text-rose-300">{selectedSessionToTransfer.requestedReaderName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Currently Assigned:</span>
-                <span className="font-medium text-slate-200">{selectedSessionToTransfer.assignedReaderName || 'None'}</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Astrologer to Receive Chat *</label>
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5">Select Target Astrologer</label>
                 <select
-                  value={transferTargetReaderId}
-                  onChange={e => setTransferTargetReaderId(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 cursor-pointer"
+                  value={targetReaderId}
+                  onChange={e => setTargetReaderId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
                 >
                   {readers.map(r => (
                     <option key={r.id} value={r.id}>
-                      {r.name} ({r.astroId || r.id}) — {r.isOnline ? 'Online' : 'Offline'}
+                      {r.name} ({(r as any).specialization || r.category || r.title}) — {r.isOnline ? 'Online' : 'Offline'}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Reason for Transfer</label>
-                <select
-                  value={transferReason}
-                  onChange={e => setTransferReason(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-rose-500 cursor-pointer"
-                >
-                  <option value="Manual Admin Load Balancing">Manual Load Balancing</option>
-                  <option value="Requested Reader Busy">Original Astrologer Busy / Offline</option>
-                  <option value="Seeker Specialty Request">Seeker Specialty Alignment</option>
-                  <option value="Direct Admin Reassignment">Direct Admin Reassignment</option>
-                </select>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Client Experience Protected:</strong> The client continues to see <strong>{selectedSessionToTransfer.requestedReaderName}</strong> and all prior messages remain intact.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setTransferModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleTransferChat}
-                disabled={actionLoading || !transferTargetReaderId}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer disabled:opacity-50"
-              >
-                {actionLoading ? 'Transferring...' : 'Confirm Transfer'}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* DRAWER / MODAL 6: VIEW CHAT TRANSCRIPT */}
-      {/* =================================================================== */}
-      {viewTranscriptSession && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-xl p-5 space-y-3.5 text-xs shadow-2xl flex flex-col max-h-[85vh]">
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white">
-                    Consultation with {viewTranscriptSession.customerName}
-                  </h3>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewTranscriptSession.status === 'active'
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                      : viewTranscriptSession.status === 'waiting'
-                      ? 'bg-amber-950 text-amber-300 border border-amber-800 animate-pulse'
-                      : 'bg-slate-900 text-slate-400'
-                  }`}>
-                    {viewTranscriptSession.status === 'waiting' ? 'Pending Acceptance' : viewTranscriptSession.status.toUpperCase()}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Astrologer: <span className="text-slate-200 font-medium">{viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName}</span> • Session #{viewTranscriptSession.id.slice(-6)}
-                </p>
-              </div>
-              <button onClick={() => setViewTranscriptSession(null)} className="text-slate-400 hover:text-white cursor-pointer p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Birth Details Card */}
-            {viewTranscriptSession.birthDetails && (
-              <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] space-y-1 shrink-0">
-                <div className="text-slate-400 font-semibold flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Seeker Profile Details</span>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
-                  {viewTranscriptSession.birthDetails.dob && (
-                    <span><strong>DOB:</strong> {viewTranscriptSession.birthDetails.dob}</span>
-                  )}
-                  {viewTranscriptSession.birthDetails.birthTime && (
-                    <span><strong>Time:</strong> {viewTranscriptSession.birthDetails.birthTime} {viewTranscriptSession.birthDetails.amPm || ''}</span>
-                  )}
-                  {viewTranscriptSession.birthDetails.placeOfBirth && (
-                    <span><strong>Place:</strong> {viewTranscriptSession.birthDetails.placeOfBirth}</span>
-                  )}
-                  {viewTranscriptSession.birthDetails.gender && (
-                    <span><strong>Gender:</strong> {viewTranscriptSession.birthDetails.gender}</span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Messages Box */}
-            <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-slate-900 rounded-xl border border-slate-800 min-h-[180px] max-h-80">
-              {viewTranscriptSession.messages && viewTranscriptSession.messages.length > 0 ? (
-                viewTranscriptSession.messages.map((msg, i) => (
-                  <div
-                    key={msg.id || i}
-                    className={`flex flex-col ${
-                      msg.sender === 'customer' ? 'items-start' : 'items-end'
-                    }`}
-                  >
-                    <div className="text-[10px] text-slate-400 mb-0.5 px-1">
-                      {msg.senderName || (msg.sender === 'customer' ? viewTranscriptSession.customerName : 'Astrologer')}
-                    </div>
-                    <div className={`px-3 py-2 rounded-2xl max-w-[85%] text-xs ${
-                      msg.sender === 'customer'
-                        ? 'bg-slate-800 text-white rounded-tl-sm'
-                        : 'bg-rose-600 text-white rounded-tr-sm'
-                    }`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-slate-400">
-                  No messages exchanged in this consultation yet. Send a message below to begin!
-                </div>
-              )}
-            </div>
-
-            {/* Interactive Admin Reply & Attend Bar */}
-            <div className="pt-2 border-t border-slate-800 space-y-2 shrink-0">
-              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5">Internal Routing Note (Optional)</label>
                 <input
                   type="text"
-                  placeholder={`Reply as ${viewTranscriptSession.assignedReaderName || viewTranscriptSession.requestedReaderName || 'Astrologer'}...`}
-                  value={adminReplyText}
-                  onChange={e => setAdminReplyText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAdminSendReply(); }}
-                  className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 text-xs"
+                  placeholder="e.g. Seeker requested specialized Vedic Kundli analysis"
+                  value={reassignNote}
+                  onChange={e => setReassignNote(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-800">
                 <button
-                  type="button"
-                  onClick={handleAdminSendReply}
-                  disabled={!adminReplyText.trim()}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+                  onClick={() => setReassignModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  Reply
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmReassign}
+                  disabled={isReassigning || !targetReaderId}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition cursor-pointer"
+                >
+                  {isReassigning ? 'Reassigning...' : 'Confirm Reassignment'}
                 </button>
               </div>
-
-              <div className="flex items-center justify-between pt-1">
-                {onOpenAstrologerDashboard && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewTranscriptSession(null);
-                      onOpenAstrologerDashboard();
-                    }}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Open in Astrologer Dashboard
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setViewTranscriptSession(null)}
-                  className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium cursor-pointer ml-auto"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* DRAWER / MODAL 7: CLIENT PROFILE & CHAT HISTORY */}
-      {/* =================================================================== */}
-      {selectedClientProfile && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 text-xs shadow-2xl max-h-[85vh] flex flex-col">
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
-                  {selectedClientProfile.name?.[0] || 'C'}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">{selectedClientProfile.name}</h3>
-                  <p className="text-[11px] text-slate-400">ID: {selectedClientProfile.id}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedClientProfile(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Profile Overview Card */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-900 border border-slate-800 shrink-0">
-              <div>
-                <span className="text-[10px] text-slate-400 block">Email</span>
-                <span className="text-xs font-semibold text-white truncate block">{selectedClientProfile.email || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Phone</span>
-                <span className="text-xs font-semibold text-white font-mono">{selectedClientProfile.phone || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Consultations</span>
-                <span className="text-xs font-bold text-emerald-400">{selectedClientProfile.totalConsultations}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Account Status</span>
-                <span className="text-xs font-bold text-rose-300">{selectedClientProfile.accountStatus.toUpperCase()}</span>
-              </div>
-            </div>
-
-            {/* Past Consultations List */}
-            <div className="flex-1 overflow-y-auto space-y-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Consultation History ({clientChatHistory.length})
-              </h4>
-
-              {clientChatsLoading ? (
-                <div className="py-8 text-center text-slate-400">Loading chat history...</div>
-              ) : clientChatHistory.length === 0 ? (
-                <div className="py-8 text-center text-slate-400 bg-slate-900 rounded-xl border border-slate-800">
-                  No consultation sessions recorded for this client.
-                </div>
-              ) : (
-                clientChatHistory.map(histSession => (
-                  <div
-                    key={histSession.id}
-                    className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between hover:border-slate-700 transition"
-                  >
-                    <div>
-                      <div className="font-bold text-white text-xs">
-                        Astrologer: {histSession.assignedReaderName || histSession.requestedReaderName}
-                      </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                        <span>Status: <strong className="text-slate-300">{histSession.status}</strong></span>
-                        <span>•</span>
-                        <span>{new Date(histSession.createdAt).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>{histSession.messages?.length || 0} messages</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setViewTranscriptSession(histSession)}
-                      className="px-3 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white font-semibold text-xs transition cursor-pointer"
-                    >
-                      View Chat
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedClientProfile(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium cursor-pointer"
-              >
-                Close Profile
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* MODAL 6: n8n WORKFLOW ASSIGNMENT & REAL-TIME TESTING CONSOLE */}
-      {/* =================================================================== */}
-      {workflowModalReader && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 text-xs shadow-2xl my-8">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src={workflowModalReader.avatar || workflowModalReader.image_url || DEFAULT_AVATARS[0]}
-                  alt={workflowModalReader.name}
-                  className="w-10 h-10 rounded-xl object-cover border border-slate-800 shrink-0"
-                />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-white">{workflowModalReader.name}</h3>
-                    <span className="px-2 py-0.5 rounded bg-slate-900 text-rose-300 font-mono font-bold text-[11px] border border-slate-800">
-                      {workflowModalReader.astroId || workflowModalReader.id}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">n8n Workflow Assignment &amp; Execution Engine</p>
-                </div>
-              </div>
-              <button onClick={() => setWorkflowModalReader(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* 1. Individual Astrologer ON/OFF Toggle */}
-            <div className={`p-4 rounded-xl border transition ${
-              workflowFormData.isWorkflowEnabled
-                ? 'bg-emerald-950/30 border-emerald-800/60'
-                : 'bg-slate-900/90 border-slate-800'
-            }`}>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${
-                      workflowFormData.isWorkflowEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-                    }`} />
-                    <span className="font-bold text-white text-sm">
-                      Workflow Execution: {workflowFormData.isWorkflowEnabled ? 'ENABLED (ON)' : 'STOPPED (OFF)'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {workflowFormData.isWorkflowEnabled
-                      ? 'User messages sent to this astrologer trigger only the assigned n8n backend workflow.'
-                      : 'Executions halted. Chats with this astrologer will not execute new n8n workflows while OFF.'}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={workflowFormData.isWorkflowEnabled}
-                  onClick={() => handleToggleWorkflow(workflowModalReader)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    workflowFormData.isWorkflowEnabled ? 'bg-emerald-500' : 'bg-slate-800 border-slate-700'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                      workflowFormData.isWorkflowEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* 2. Workflow Mapping Form */}
-            <form onSubmit={handleSaveWorkflowMapping} className="space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Assigned n8n Workflow ID *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. wf_LYS-10001"
-                    value={workflowFormData.n8nWorkflowId}
-                    onChange={e => setWorkflowFormData({ ...workflowFormData, n8nWorkflowId: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500 font-bold"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">Mapped strictly to Astrologer ID: {workflowModalReader.astroId || workflowModalReader.id}</span>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Friendly Workflow Title
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Vedic Kundali Synthesis Flow"
-                    value={workflowFormData.n8nWorkflowName}
-                    onChange={e => setWorkflowFormData({ ...workflowFormData, n8nWorkflowName: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Dedicated Webhook URL (Optional override)
-                </label>
-                <input
-                  type="url"
-                  placeholder={`Default: ${n8nConfig.baseUrl || 'https://n8n.webhook.internal'}${n8nConfig.defaultWebhookPath || '/webhook/astrologer-chat'}`}
-                  value={workflowFormData.n8nWebhookUrl}
-                  onChange={e => setWorkflowFormData({ ...workflowFormData, n8nWebhookUrl: e.target.value })}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 font-mono"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Leave empty to use global default webhook path with workflowId payload</span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{actionLoading ? 'Saving...' : 'Save Workflow Mapping'}</span>
-                </button>
-              </div>
-            </form>
-
-            {/* 3. Real-Time Workflow Testing Console */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-400" />
-                  <h4 className="font-bold text-white text-xs">Live Workflow Execution Tester</h4>
-                </div>
-                <span className="text-[10px] font-mono text-slate-400">
-                  Target: {workflowModalReader.astroId || workflowModalReader.id}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Test Seeker Message Prompt</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={testMessageInput}
-                    onChange={e => setTestMessageInput(e.target.value)}
-                    placeholder="Enter message to test n8n workflow output..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTestWorkflow}
-                    disabled={testWorkflowLoading}
-                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>{testWorkflowLoading ? 'Testing...' : 'Trigger Test'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Test Result Display */}
-              {testWorkflowResult && (
-                <div className={`p-3 rounded-xl border text-xs space-y-2 ${
-                  testWorkflowResult.status === 'success' ? 'bg-emerald-950/30 border-emerald-800/60' :
-                  testWorkflowResult.status === 'stopped' ? 'bg-amber-950/30 border-amber-800/60' :
-                  'bg-rose-950/30 border-rose-800/60'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
-                        testWorkflowResult.status === 'success' ? 'bg-emerald-500 text-slate-950' :
-                        testWorkflowResult.status === 'stopped' ? 'bg-amber-500 text-slate-950' :
-                        'bg-rose-500 text-white'
-                      }`}>
-                        Status: {testWorkflowResult.status}
-                      </span>
-                      {testWorkflowResult.latencyMs && (
-                        <span className="text-[10px] font-mono text-slate-400">
-                          Latency: {testWorkflowResult.latencyMs}ms
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      Workflow: {testWorkflowResult.workflowId || workflowFormData.n8nWorkflowId}
-                    </span>
-                  </div>
-
-                  {testWorkflowResult.status === 'stopped' && (
-                    <p className="text-amber-300 text-[11px]">
-                      {testWorkflowResult.message || 'Execution halted because this astrologer’s workflow toggle is currently OFF.'}
-                    </p>
-                  )}
-
-                  {testWorkflowResult.reply && (
-                    <div className="bg-slate-950/90 rounded-lg p-2.5 border border-slate-800">
-                      <div className="text-[10px] uppercase font-bold text-slate-400 mb-1">Response Output:</div>
-                      <div className="text-slate-200 text-xs whitespace-pre-wrap leading-relaxed">
-                        {testWorkflowResult.reply}
-                      </div>
-                    </div>
-                  )}
-
-                  {testWorkflowResult.error && (
-                    <p className="text-rose-300 text-[11px]">
-                      Error: {testWorkflowResult.error}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-              <span className="text-[10px] text-slate-400 font-mono">
-                Last Executed: {workflowModalReader.n8nLastExecutionAt ? new Date(workflowModalReader.n8nLastExecutionAt).toLocaleString() : 'Never'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setWorkflowModalReader(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium cursor-pointer"
-              >
-                Close
-              </button>
             </div>
 
           </div>

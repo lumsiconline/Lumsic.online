@@ -5649,6 +5649,93 @@ app.get('/api/admin/sessions', (_req: Request, res: Response) => {
   res.json({ sessions: list });
 });
 
+// Central Admin Inbox API: Retrieves ALL customer conversations across all readers and workflows with real-time stats
+app.get('/api/admin/inbox', (req: Request, res: Response) => {
+  updateStats();
+  const allSessions = Object.values(db.sessions).sort((a, b) => {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  
+  const status = (req.query.status as string || '').trim().toLowerCase();
+  const search = (req.query.search as string || '').trim().toLowerCase();
+  const readerId = (req.query.readerId as string || '').trim();
+
+  let filtered = allSessions;
+  if (status && status !== 'all') {
+    filtered = filtered.filter(s => (s.status || '').toLowerCase() === status);
+  }
+  if (readerId && readerId !== 'all') {
+    filtered = filtered.filter(s => s.assignedReaderId === readerId || s.requestedReaderId === readerId || s.assignedAstroId === readerId || s.requestedAstroId === readerId);
+  }
+  if (search) {
+    filtered = filtered.filter(s => 
+      (s.customerName && s.customerName.toLowerCase().includes(search)) ||
+      (s.customerId && s.customerId.toLowerCase().includes(search)) ||
+      (s.id && s.id.toLowerCase().includes(search)) ||
+      (s.assignedReaderName && s.assignedReaderName.toLowerCase().includes(search)) ||
+      (s.requestedReaderName && s.requestedReaderName.toLowerCase().includes(search)) ||
+      (s.topic && s.topic.toLowerCase().includes(search)) ||
+      (s.lastMessageText && s.lastMessageText.toLowerCase().includes(search))
+    );
+  }
+
+  const activeCount = allSessions.filter(s => s.status === 'active').length;
+  const pendingCount = allSessions.filter(s => s.status === 'waiting').length;
+  const completedCount = allSessions.filter(s => s.status === 'completed').length;
+  const totalCount = allSessions.length;
+
+  res.json({
+    sessions: filtered,
+    stats: {
+      total: totalCount,
+      active: activeCount,
+      pending: pendingCount,
+      completed: completedCount,
+      totalCustomers: Object.keys(db.customers).length,
+      onlineReaders: db.readers.filter(r => r.isOnline).length,
+      totalReaders: db.readers.length
+    }
+  });
+});
+
+// Reassign conversation directly from Admin Inbox
+app.post('/api/admin/inbox/:id/assign', (req: Request, res: Response) => {
+  const session = db.sessions[req.params.id];
+  if (!session) return res.status(404).json({ error: 'Conversation not found' });
+  const { readerId, note } = req.body || {};
+  const reader = db.readers.find(r => r.id === readerId || r.astroId === readerId);
+  if (!reader) return res.status(400).json({ error: 'Astrologer not found' });
+
+  session.assignedReaderId = reader.id;
+  session.assignedReaderName = reader.name;
+  session.assignedAstroId = reader.astroId || reader.id;
+
+  const notice: ChatMessage = {
+    id: 'sys_assign_' + Date.now(),
+    sessionId: session.id,
+    sender: 'system',
+    senderName: 'LUMSIC System',
+    text: `Consultation assigned to ${reader.name}. ${note ? `(${note})` : ''}`,
+    timestamp: new Date().toISOString(),
+    isSystemNotice: true
+  };
+  session.messages.push(notice);
+  saveDB();
+  broadcast('session_updated', { session, notice });
+  res.json({ success: true, session });
+});
+
+// Complete conversation directly from Admin Inbox
+app.post('/api/admin/inbox/:id/complete', (req: Request, res: Response) => {
+  const session = db.sessions[req.params.id];
+  if (!session) return res.status(404).json({ error: 'Conversation not found' });
+  session.status = 'completed';
+  session.endedAt = new Date().toISOString();
+  saveDB();
+  broadcast('session_completed', { session });
+  res.json({ success: true, session });
+});
+
 // 1. Operational Overview & KPIs
 app.get('/api/admin/overview', (_req: Request, res: Response) => {
   updateStats();
