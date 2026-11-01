@@ -54,7 +54,8 @@ import {
   broadcastSessionEvent, 
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
-import { auth, signOutCurrentUser, AuthUserProfile } from '../lib/firebase';
+import { auth, signOutCurrentUser, AuthUserProfile, db } from '../lib/firebase';
+import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { READERS } from '../data/readers';
 
 interface AdminCMSPanelProps {
@@ -535,10 +536,36 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     const onCustomEvent = (e: Event) => handleIncomingSessionEvent(e as CustomEvent);
     window.addEventListener('lumsic_session_event', onCustomEvent);
 
+    // Real-time Firestore synchronization: Any consultation from any domain (lumsic.online, mobile, preview)
+    // lands in the Admin Dashboard immediately!
+    let unsubFirestore: (() => void) | null = null;
+    try {
+      unsubFirestore = onSnapshot(collection(db, 'sessions'), (snapshot) => {
+        const remoteSessions: ConsultationSession[] = [];
+        snapshot.forEach(docSnap => {
+          const s = docSnap.data() as ConsultationSession;
+          if (s && s.id) remoteSessions.push(s);
+        });
+        if (remoteSessions.length > 0) {
+          setSessions(prev => {
+            const map = new Map<string, ConsultationSession>();
+            prev.forEach(s => map.set(s.id, s));
+            remoteSessions.forEach(s => map.set(s.id, { ...(map.get(s.id) || {}), ...s }));
+            return Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          });
+        }
+      }, (err) => {
+        console.warn('Firestore sessions real-time listener notice:', err);
+      });
+    } catch (err) {
+      console.warn('Firestore onSnapshot init notice:', err);
+    }
+
     return () => {
       clearInterval(pollInterval);
       if (bc) bc.close();
       if (es) es.close();
+      if (unsubFirestore) unsubFirestore();
       window.removeEventListener('lumsic_session_event', onCustomEvent);
     };
   }, []);
@@ -1068,6 +1095,9 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     broadcastSessionEvent('session_accepted', updated);
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
     setViewTranscriptSession(updated);
+    try {
+      setDoc(doc(db, 'sessions', updated.id), updated, { merge: true }).catch(() => {});
+    } catch {}
   };
 
   const handleAdminSendReply = async () => {
@@ -1101,6 +1131,10 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     broadcastSessionEvent('message_received', newMsg);
 
     try {
+      setDoc(doc(db, 'sessions', updatedSession.id), updatedSession, { merge: true }).catch(() => {});
+    } catch {}
+
+    try {
       await fetch(`/api/sessions/${updatedSession.id}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1127,6 +1161,9 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
       saveStoredSession(updated);
       broadcastSessionEvent('session_accepted', updated);
       setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
+      try {
+        setDoc(doc(db, 'sessions', updated.id), updated, { merge: true }).catch(() => {});
+      } catch {}
 
       const res = await adminFetch('/api/admin/chats/forward', {
         method: 'POST',

@@ -11,7 +11,9 @@ const DEFAULT_CLOUD_RUN_BACKEND = 'https://ais-dev-xia7bhme6juyfqryqodf6b-551171
 
 function resolveApiBase(): string {
   const envBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)?.trim();
-  if (envBase) return envBase.replace(/\/+$/, '');
+  if (envBase && !envBase.includes('YOUR-CLOUD-RUN') && !envBase.includes('example.com') && !envBase.includes('placeholder')) {
+    return envBase.replace(/\/+$/, '');
+  }
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -28,6 +30,10 @@ export const API_BASE = resolveApiBase();
 export function withApiBase(url: string): string {
   if (!API_BASE) return url;
   return /^\/(api|uploads)(\/|\?|$)/.test(url) ? API_BASE + url : url;
+}
+
+export function installApiInterceptor() {
+  install();
 }
 
 function install() {

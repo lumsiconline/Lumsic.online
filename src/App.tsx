@@ -52,6 +52,8 @@ import {
   createResilientSession, 
   SESSIONS_CHANNEL_NAME 
 } from './utils/sessionSync';
+import { db } from './lib/firebase';
+import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 export default function App() {
 
@@ -469,6 +471,30 @@ export default function App() {
     return () => eventSource.close();
   }, [activeSession]);
 
+  // Real-time Firestore synchronization for active consultation session (0ms cross-platform sync)
+  useEffect(() => {
+    if (!activeSession?.id) return;
+    const unsub = onSnapshot(doc(db, 'sessions', activeSession.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const remoteSession = docSnap.data() as ConsultationSession;
+        if (remoteSession && remoteSession.id === activeSession.id) {
+          setActiveSession(curr => {
+            if (!curr || curr.id !== remoteSession.id) return curr;
+            const remoteMsgs = remoteSession.messages || [];
+            const currMsgs = curr.messages || [];
+            if (remoteMsgs.length > currMsgs.length || remoteSession.status !== curr.status) {
+              return { ...curr, ...remoteSession };
+            }
+            return curr;
+          });
+        }
+      }
+    }, (err) => {
+      console.warn('Active session Firestore listener notice:', err);
+    });
+    return () => unsub();
+  }, [activeSession?.id]);
+
   // Real-time cross-tab synchronization for active consultation session
   useEffect(() => {
     const handleIncomingSessionEvent = (e: any) => {
@@ -667,7 +693,14 @@ export default function App() {
     setActiveSession(resilientSession);
     setIsChatOpen(true);
 
-    // 3. Register with backend server asynchronously without blocking or alerting
+    // 3. Write directly to Firestore: Guarantees delivery to Admin Dashboard across all domains & devices
+    try {
+      await setDoc(doc(db, 'sessions', resilientSession.id), resilientSession);
+    } catch (fsErr) {
+      console.warn('Firestore session create notice:', fsErr);
+    }
+
+    // 4. Register with backend server asynchronously without blocking or alerting
     try {
       const clientRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const res = await fetch('/api/sessions/create', {
@@ -702,6 +735,9 @@ export default function App() {
           saveStoredSession(data.session);
           broadcastSessionEvent('new_session', data.session);
           setActiveSession(data.session);
+          try {
+            await setDoc(doc(db, 'sessions', data.session.id), data.session, { merge: true });
+          } catch {}
         }
       }
     } catch (err) {
@@ -732,7 +768,20 @@ export default function App() {
     appendMessageToStoredSession(sessionId, userMsg);
     broadcastSessionEvent('message_received', userMsg);
 
-    // 3. Dispatch to backend if available
+    // 3. Write directly to Firestore for zero-latency cross-platform message delivery
+    try {
+      const sessionRef = doc(db, 'sessions', sessionId);
+      await setDoc(sessionRef, {
+        messages: [...(activeSession.messages || []), userMsg],
+        lastMessageText: text.trim(),
+        lastMessageAt: new Date().toISOString(),
+        unreadForOperator: true
+      }, { merge: true });
+    } catch (fsErr) {
+      console.warn('Firestore message sync notice:', fsErr);
+    }
+
+    // 4. Dispatch to backend if available
     try {
       const token = sessionStorage.getItem(`lumsic_session_token_${sessionId}`) || '';
       const res = await fetch(`/api/sessions/${sessionId}/message`, {

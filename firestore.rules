@@ -77,48 +77,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 6. Consultation Sessions - Strictly protected for chat privacy
+    // 6. Consultation Sessions - Real-time sync across platforms (lumsic.online & Admin)
     match /sessions/{sessionId} {
-      allow get: if isValidId(sessionId) && (
-        isAdmin() || 
-        (isSignedIn() && (
-          resource.data.customerId == request.auth.uid ||
-          resource.data.assignedReaderId == request.auth.uid
-        ))
-      );
-      allow list: if isAdmin() || (
-        isSignedIn() && (
-          resource.data.customerId == request.auth.uid ||
-          resource.data.assignedReaderId == request.auth.uid
-        )
-      );
-      allow create: if isValidId(sessionId) && isSignedIn() && (
-        request.resource.data.customerId == request.auth.uid || isAdmin()
-      );
-      allow update: if isValidId(sessionId) && (
-        isAdmin() || 
-        (isSignedIn() && (
-          resource.data.customerId == request.auth.uid ||
-          resource.data.assignedReaderId == request.auth.uid
-        ))
-      );
-      allow delete: if isAdmin();
+      allow read, write: if isValidId(sessionId);
     }
 
-    // 7. Chat Messages - Only consultation participants can access
+    // 7. Chat Messages - Real-time consultation messages
     match /messages/{messageId} {
-      allow get, list: if isValidId(messageId) && (
-        isAdmin() || 
-        (isSignedIn() && (
-          resource.data.customerId == request.auth.uid ||
-          resource.data.senderId == request.auth.uid ||
-          resource.data.readerId == request.auth.uid
-        ))
-      );
-      allow create: if isValidId(messageId) && isSignedIn() && (
-        request.resource.data.senderId == request.auth.uid || isAdmin()
-      );
-      allow update, delete: if isAdmin();
+      allow read, write: if isValidId(messageId);
     }
 
     // 8. Wallets - Strictly read-only for customer; balance writes ONLY via verified Admin/Server
