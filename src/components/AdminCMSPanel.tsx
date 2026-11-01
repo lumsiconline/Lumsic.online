@@ -39,7 +39,7 @@ import {
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
 import { auth, signOutCurrentUser, AuthUserProfile, db } from '../lib/firebase';
-import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { READERS } from '../data/readers';
 import { Reader, ConsultationSession, ChatMessage } from '../types';
 
@@ -182,11 +182,24 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
         }
       }
 
-      // 3. Resilient merge: Combine server sessions with local storage sessions
+      // 3. Resilient merge: Combine server sessions, Firestore sessions, and local storage sessions
       const localStored = getStoredSessions();
       const sessionMap = new Map<string, ConsultationSession>();
       localStored.forEach(s => sessionMap.set(s.id, s));
       serverSessions.forEach(s => sessionMap.set(s.id, { ...(sessionMap.get(s.id) || {}), ...s }));
+
+      // Direct Firestore fetch ensures immediate sync across all domains
+      try {
+        const firestoreSnap = await getDocs(collection(db, 'sessions'));
+        firestoreSnap.forEach(d => {
+          const s = d.data() as ConsultationSession;
+          if (s && s.id) {
+            sessionMap.set(s.id, { ...(sessionMap.get(s.id) || {}), ...s });
+          }
+        });
+      } catch (fsErr) {
+        console.warn('Firestore initial fetch notice:', fsErr);
+      }
 
       const mergedList = Array.from(sessionMap.values()).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

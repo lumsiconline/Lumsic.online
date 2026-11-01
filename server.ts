@@ -32,12 +32,29 @@ import {
   ReferralFriend,
   ReferralData
 } from './src/types/index';
+import { initializeApp as initFirebase, getApps as getFirebaseApps, getApp as getFirebaseApp } from 'firebase/app';
+import { getFirestore, collection as fsCollection, doc as fsDoc, setDoc as fsSetDoc, onSnapshot as fsOnSnapshot } from 'firebase/firestore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize Firebase Firestore for bidirectional live sync
+let firestoreDb: any = null;
+try {
+  const firebaseConfigPath = path.join(__dirname, 'firebase-applet-config.json');
+  if (fs.existsSync(firebaseConfigPath)) {
+    const config = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
+    const fbApp = !getFirebaseApps().length ? initFirebase(config) : getFirebaseApp();
+    firestoreDb = getFirestore(fbApp, config.firestoreDatabaseId);
+    console.log('Connected server.ts to Firebase Firestore database:', config.firestoreDatabaseId);
+  }
+} catch (fbErr: any) {
+  console.warn('Firebase Firestore server init warning:', fbErr?.message || fbErr);
+}
+
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_SERVER_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVER_KEY
@@ -6842,7 +6859,45 @@ app.post('/api/admin/assistant-settings/test', async (req: Request, res: Respons
 
 
 // Initialize Vite in middleware mode for dev
+function startFirestoreSync() {
+  if (!firestoreDb) return;
+  try {
+    fsOnSnapshot(fsCollection(firestoreDb, 'sessions'), (snapshot: any) => {
+      let hasChanges = false;
+      snapshot.forEach((docSnap: any) => {
+        const s = docSnap.data();
+        if (s && s.id && s.id !== 'test_probe_1') {
+          const existing = db.sessions[s.id];
+          if (!existing) {
+            db.sessions[s.id] = s;
+            hasChanges = true;
+            broadcast('new_session', s);
+            console.log('Synced Firestore session into server memory:', s.id, s.customerName);
+          } else {
+            const hasNewMessages = (s.messages?.length || 0) > (existing.messages?.length || 0);
+            const statusChanged = s.status !== existing.status;
+            if (hasNewMessages || statusChanged) {
+              db.sessions[s.id] = { ...existing, ...s };
+              hasChanges = true;
+              broadcast('session_updated', { session: db.sessions[s.id] });
+            }
+          }
+        }
+      });
+      if (hasChanges) {
+        saveDB();
+      }
+    }, (err: any) => {
+      console.warn('Server Firestore sync listener warning:', err?.message || err);
+    });
+  } catch (err: any) {
+    console.warn('Server Firestore sync registration error:', err?.message || err);
+  }
+}
+
 async function setupApp() {
+  // Start bidirectional Firestore sync immediately
+  startFirestoreSync();
   // Standalone app direct navigation
   app.get(['/admin', '/admin.html', '/admin/lumsic.online', '/admin/lumsic.online/*'], (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist', 'admin.html'))) {
