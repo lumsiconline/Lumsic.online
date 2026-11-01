@@ -304,7 +304,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     try {
       const [readersRes, sessionsRes, clientsRes, overviewRes, n8nRes] = await Promise.all([
         adminFetch('/api/readers').catch(() => null),
-        adminFetch('/api/astroboard/sessions?isAdmin=true').catch(() => null),
+        adminFetch('/api/astroboard/sessions?readerId=psychic-tamara&isAdmin=true').catch(() => null),
         adminFetch('/api/admin/clients').catch(() => null),
         adminFetch('/api/admin/overview').catch(() => null),
         adminFetch('/api/admin/n8n/config').catch(() => null)
