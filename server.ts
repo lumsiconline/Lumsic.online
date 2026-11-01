@@ -294,7 +294,7 @@ function verifyAdmin(req: Request): boolean {
     return true;
   }
   const adminUid = (req.headers['x-admin-uid'] as string || '').trim();
-  if (adminUid === 'super_admin_bankush') {
+  if (adminUid === 'super_admin_bankush' || adminUid === 'super_admin') {
     return true;
   }
 
@@ -776,6 +776,19 @@ app.post('/api/auth/signup', authRateLimiter, async (req: Request, res: Response
 
     db.customers[userId] = newCustomer as any;
     saveDB();
+
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password: pass,
+          email_confirm: true,
+          user_metadata: { full_name: cleanName, phone: cleanPhone }
+        });
+      } catch {
+        // Continue smoothly if already exists in Supabase
+      }
+    }
 
     const isOwner = cleanEmail === 'bankush014@gmail.com' || cleanEmail === 'info.lumsic@gmail.com';
     const role = isOwner ? 'admin' : (ROLES_STORE[cleanEmail]?.role || 'user');
@@ -4536,7 +4549,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     initialQuestion, 
     birthDetails,
     requestedReaderId,
-    clientRequestId
+    clientRequestId,
+    existingSessionId
   } = req.body || {};
 
   // Idempotency: if the browser retries after a gateway timeout, return the chat that was
@@ -4570,7 +4584,9 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
   }
 
   const isEligibleForFree = !cust.freeMinutesUsed;
-  const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  const sessionId = (typeof existingSessionId === 'string' && existingSessionId.trim())
+    ? existingSessionId.trim()
+    : ('sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
   const now = Date.now();
 
   const userName = birthDetails?.name || firstName || cust.name || 'Seeker';

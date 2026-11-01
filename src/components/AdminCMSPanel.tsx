@@ -450,6 +450,77 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
       }
     };
 
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/events');
+      es.addEventListener('new_session', (e: MessageEvent) => {
+        try {
+          const session = JSON.parse(e.data);
+          if (session && session.id) {
+            setSessions(prev => {
+              const exists = prev.some(s => s.id === session.id);
+              if (exists) return prev.map(s => s.id === session.id ? { ...s, ...session } : s);
+              return [session, ...prev];
+            });
+            fetchData();
+          }
+        } catch {}
+      });
+
+      es.addEventListener('message_received', (e: MessageEvent) => {
+        try {
+          const message = JSON.parse(e.data);
+          if (message && message.sessionId) {
+            setSessions(prev => prev.map(s => {
+              if (s.id === message.sessionId) {
+                const msgs = s.messages || [];
+                if (!msgs.some(m => m.id === message.id)) {
+                  return { ...s, messages: [...msgs, message], lastMessageText: message.text, lastMessageAt: message.timestamp };
+                }
+              }
+              return s;
+            }));
+            setViewTranscriptSession(curr => {
+              if (curr && curr.id === message.sessionId) {
+                const msgs = curr.messages || [];
+                if (!msgs.some(m => m.id === message.id)) {
+                  return { ...curr, messages: [...msgs, message] };
+                }
+              }
+              return curr;
+            });
+          }
+        } catch {}
+      });
+
+      es.addEventListener('session_accepted', (e: MessageEvent) => {
+        try {
+          const { session } = JSON.parse(e.data);
+          if (session && session.id) {
+            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, ...session, status: 'active' } : s));
+          }
+        } catch {}
+      });
+
+      es.addEventListener('session_completed', (e: MessageEvent) => {
+        try {
+          const { session } = JSON.parse(e.data);
+          if (session && session.id) {
+            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s));
+          }
+        } catch {}
+      });
+
+      es.addEventListener('session_ended', (e: MessageEvent) => {
+        try {
+          const { session } = JSON.parse(e.data);
+          if (session && session.id) {
+            setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'completed' } : s));
+          }
+        } catch {}
+      });
+    } catch {}
+
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
@@ -463,6 +534,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     return () => {
       clearInterval(pollInterval);
       if (bc) bc.close();
+      if (es) es.close();
       window.removeEventListener('lumsic_session_event', onCustomEvent);
     };
   }, []);
@@ -472,6 +544,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
   const onlineAstrologersCount = readers.filter(r => r.isOnline).length;
   const activeChatsList = sessions.filter(s => s.status === 'active');
   const pendingChatsList = sessions.filter(s => s.status === 'waiting');
+  const liveChatsList = [...pendingChatsList, ...activeChatsList];
   const totalClientsCount = clients.length;
 
   // =========================================================================
@@ -1605,25 +1678,30 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                 </div>
               )}
 
-              {/* QUICK ACTIVE SESSIONS PREVIEW */}
+              {/* QUICK ACTIVE & PENDING SESSIONS PREVIEW */}
               <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-bold text-white">Live Active Consultations</h2>
+                    <h2 className="text-sm font-bold text-white">Live Consultations &amp; Incoming Chats</h2>
+                    {pendingChatsList.length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500 text-slate-950 animate-pulse">
+                        {pendingChatsList.length} Incoming
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => setActiveTab('chats')}
                     className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
                   >
-                    <span>View all ({activeChatsList.length})</span>
+                    <span>View all ({liveChatsList.length})</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
 
-                {activeChatsList.length === 0 ? (
+                {liveChatsList.length === 0 ? (
                   <div className="py-8 text-center text-xs text-slate-400">
-                    No active chat sessions currently in progress.
+                    No active or pending chat sessions currently in progress.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -1638,7 +1716,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
-                        {activeChatsList.slice(0, 5).map(session => (
+                        {liveChatsList.slice(0, 6).map(session => (
                           <tr key={session.id} className="text-slate-300">
                             <td className="py-2.5 font-bold text-white">
                               {session.customerName || 'Seeker'}
@@ -1650,22 +1728,32 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                               £{session.ratePerMinute?.toFixed(2) || '1.50'}/min
                             </td>
                             <td className="py-2.5">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                Active Live
-                              </span>
+                              {session.status === 'waiting' ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/80 animate-pulse">
+                                  Pending Pickup
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                  Active Live
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 text-right space-x-2">
                               <button
                                 onClick={() => openTransferModal(session)}
                                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition cursor-pointer"
                               >
-                                Transfer
+                                {session.status === 'waiting' ? 'Assign' : 'Transfer'}
                               </button>
                               <button
                                 onClick={() => setViewTranscriptSession(session)}
-                                className="px-2.5 py-1 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 text-xs font-semibold transition cursor-pointer"
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                  session.status === 'waiting'
+                                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 font-bold shadow-sm'
+                                    : 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-300'
+                                }`}
                               >
-                                View Chat
+                                {session.status === 'waiting' ? 'Attend / View' : 'View Chat'}
                               </button>
                             </td>
                           </tr>
