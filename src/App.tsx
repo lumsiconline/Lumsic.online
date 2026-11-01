@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, ShieldCheck, Compass } from 'lucide-react';
 import { AdminCMSPanel } from './components/AdminCMSPanel';
 import { AdminStandaloneApp } from './components/AdminStandaloneApp';
-import { AstroboardView } from './components/AstroboardView';
 import { Header } from './components/Header';
 import { OfferBanner } from './components/OfferBanner';
 import { Hero } from './components/Hero';
@@ -70,28 +69,6 @@ export default function App() {
         hash.includes('/admin') ||
         params.get('admin') === 'true' ||
         params.get('panel') === 'admin'
-      ) {
-        return true;
-      }
-    }
-    return false;
-  });
-
-  // Astrologer Dashboard / Workstation view state
-  const [isAstroboardView, setIsAstroboardView] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      if (
-        params.get('astrologer') === 'true' ||
-        params.get('astroboard') === 'true' ||
-        params.get('panel') === 'astrologer' ||
-        path.includes('astrologer/lumsic.online') ||
-        hash.includes('astrologer/lumsic.online') ||
-        path.includes('/astrologer') ||
-        hash.includes('/astrologer') ||
-        hash.includes('astroboard')
       ) {
         return true;
       }
@@ -805,20 +782,7 @@ export default function App() {
     return (
       <AdminStandaloneApp
         onBackToSite={() => setIsAdminView(false)}
-      />
-    );
-  }
-
-  if (isAstroboardView) {
-    return (
-      <AstroboardView
-        onBackToSite={() => setIsAstroboardView(false)}
-        onOpenAdmin={() => {
-          setIsAstroboardView(false);
-          setIsAdminView(true);
-        }}
-        readers={readers}
-        onToggleReaderOnline={handleToggleReaderOnline}
+        initialTab={typeof window !== 'undefined' && window.location.pathname.toLowerCase().includes('astrologer') ? 'chats' : undefined}
       />
     );
   }
@@ -856,7 +820,6 @@ export default function App() {
           }}
           isOwnerAdmin={isOwnerAdmin}
           onOpenAdmin={() => setIsAdminView(true)}
-          onOpenAstrologerDashboard={() => setIsAstroboardView(true)}
         />
       </div>
 
