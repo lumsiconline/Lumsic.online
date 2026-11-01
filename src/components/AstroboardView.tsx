@@ -335,12 +335,14 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
         }
       });
 
+      const activeReaderIds = [currentAstrologer?.id, currentAstrologer?.astroId]
+        .filter((id): id is string => Boolean(id));
       const combinedSessions = Array.from(sessionMap.values())
-        // The server query is already scoped to readerId=psychic-tamara.
-        // Do not re-filter by optional assignment metadata here: newly-created
-        // sessions can be returned by the central inbox API before those legacy
-        // fields are populated, which previously made fresh chats disappear.
-        .filter(() => isCentralInbox)
+        // Psychic Tamara keeps the platform-wide central inbox. Every other
+        // astrologer sees only consultations routed to their own profile ID.
+        .filter(s => isCentralInbox || [
+          s.assignedReaderId, s.requestedReaderId, s.assignedAstroId, s.requestedAstroId
+        ].some(id => Boolean(id) && activeReaderIds.includes(id as string)))
         .sort((a, b) => {
         const tA = new Date(a.createdAt || a.startTime || 0).getTime();
         const tB = new Date(b.createdAt || b.startTime || 0).getTime();
@@ -401,7 +403,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
       if (!type || !data) return;
 
       if (type === 'new_session' && data.id) {
-        if (!isCentralInbox) return;
+        const activeReaderIds = [currentAstrologer?.id, currentAstrologer?.astroId].filter(Boolean);
+        const belongsToReader = isCentralInbox || [
+          data.assignedReaderId, data.requestedReaderId, data.assignedAstroId, data.requestedAstroId
+        ].some(id => id && activeReaderIds.includes(id));
+        if (!belongsToReader) return;
         setSessions(prev => [data, ...prev.filter(s => s.id !== data.id)]);
         if (!dismissedSessionIdsRef.current.has(data.id) && activeChatSession?.id !== data.id) {
           seenSessionIdsRef.current.add(data.id);
@@ -477,7 +483,11 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
             const raw = JSON.parse(dataText);
             if (eventName === 'new_session') {
               const session = raw.session || raw;
-              if (session?.id && isCentralInbox) {
+              const activeReaderIds = [currentAstrologer?.id, currentAstrologer?.astroId].filter(Boolean);
+              const belongsToReader = isCentralInbox || [
+                session?.assignedReaderId, session?.requestedReaderId, session?.assignedAstroId, session?.requestedAstroId
+              ].some(id => id && activeReaderIds.includes(id));
+              if (session?.id && belongsToReader) {
                 setSessions(prev => [session, ...prev.filter(item => item.id !== session.id)]);
                 if (!dismissedSessionIdsRef.current.has(session.id) && activeChatSession?.id !== session.id) {
                   setIncomingAlertSession(session);
