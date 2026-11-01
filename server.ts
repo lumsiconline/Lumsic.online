@@ -6725,11 +6725,7 @@ async function setupApp() {
     }
   });
   app.get(['/astrologer', '/astrologer.html', '/astrologer/lumsic.online', '/astrologer/lumsic.online/*'], (_req: Request, res: Response) => {
-    if (process.env.NODE_ENV === 'production' && fs.existsSync(path.join(__dirname, 'dist', 'astrologer.html'))) {
-      res.sendFile(path.join(__dirname, 'dist', 'astrologer.html'));
-    } else {
-      res.redirect('/astrologer.html');
-    }
+    res.redirect(301, '/admin.html?tab=chats');
   });
 
   // Lightweight health endpoint for Cloud Run startup/liveness checks.
@@ -6748,7 +6744,7 @@ async function setupApp() {
       res.sendFile(path.join(__dirname, 'dist', 'admin.html'));
     });
     app.get(['/astrologer', '/astrologer.html', '/astrologer/lumsic.online', '/astrologer/lumsic.online/*'], (_req: Request, res: Response) => {
-      res.sendFile(path.join(__dirname, 'dist', 'astrologer.html'));
+      res.redirect(301, '/admin.html?tab=chats');
     });
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
