@@ -214,16 +214,14 @@ export const Header: React.FC<HeaderProps> = ({
   const navLinks = [
     { id: 'horoscope', label: 'Horoscope' },
     { id: 'tarot', label: 'Tarot' },
-    { id: 'birth-chart', label: 'Kundli' },
     { id: 'rituals', label: 'Rituals' },
     { id: 'shop', label: 'Shop', badge: 'New' },
-    { id: 'learn', label: 'Learn' },
   ];
 
   return (
     <>
       <header 
-        className={`sticky top-0 z-40 w-full select-none transition-all duration-300 ${
+        className={`sticky top-0 z-40 w-full max-w-full overflow-x-clip select-none transition-all duration-300 ${
           showHeader ? 'translate-y-0' : '-translate-y-full'
         } ${
           isScrolled 
@@ -234,9 +232,9 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Subtle top star glow accent */}
         <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#F5C542]/40 to-transparent pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-4 lg:px-6">
           <div 
-            className={`flex items-center justify-between gap-2.5 sm:gap-4 transition-all duration-300 ${
+            className={`flex items-center justify-between gap-1.5 sm:gap-3 lg:gap-4 transition-all duration-300 w-full min-w-0 ${
               isScrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-20'
             }`}
           >
@@ -305,14 +303,14 @@ export const Header: React.FC<HeaderProps> = ({
             {/* =========================================================================
                 2. DESKTOP SEARCH BAR (PILL-SHAPED GLASS IN CENTRE + ⌘K SHORTCUT)
             ========================================================================= */}
-            <div className="hidden lg:block relative" data-search-box>
+            <div className="hidden lg:block relative shrink min-w-0" data-search-box>
               <div 
                 onClick={() => setDesktopSearchOpen(true)}
-                className={`relative flex items-center gap-2.5 rounded-full bg-white/[0.05] border transition-all duration-200 cursor-pointer ${
+                className={`relative flex items-center gap-2 rounded-full bg-white/[0.05] border transition-all duration-200 cursor-pointer ${
                   desktopSearchOpen 
-                    ? 'w-72 xl:w-88 border-[#F5C542] ring-2 ring-[#F5C542]/40 bg-[#0B1030] shadow-[0_0_20px_rgba(245,197,66,0.25)]' 
-                    : 'w-56 xl:w-72 border-white/10 hover:border-white/25 hover:bg-white/[0.08]'
-                } px-3.5 py-2`}
+                    ? 'w-52 lg:w-60 xl:w-76 border-[#F5C542] ring-2 ring-[#F5C542]/40 bg-[#0B1030] shadow-[0_0_20px_rgba(245,197,66,0.25)]' 
+                    : 'w-36 lg:w-44 xl:w-60 border-white/10 hover:border-white/25 hover:bg-white/[0.08]'
+                } px-3 py-1.5`}
               >
                 <Search className={`w-4 h-4 shrink-0 transition-colors ${desktopSearchOpen ? 'text-[#F5C542]' : 'text-[#A8B0D0]'}`} />
                 <input
@@ -438,7 +436,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* =========================================================================
                 3. DESKTOP NAVIGATION LINKS WITH ANIMATED GOLD UNDERLINE
             ========================================================================= */}
-            <nav className="hidden lg:flex items-center h-full gap-5 xl:gap-6 text-[13.5px] font-medium text-slate-200">
+            <nav className="hidden lg:flex items-center h-full gap-3.5 xl:gap-5 text-[13px] xl:text-[13.5px] font-medium text-slate-200 shrink-0">
               {navLinks.map((item) => (
                 <button
                   key={item.id}
@@ -461,13 +459,13 @@ export const Header: React.FC<HeaderProps> = ({
             {/* =========================================================================
                 4. RIGHT CONTROLS: WALLET PILL + NOTIFICATIONS + CHAT CTA + AVATAR
             ========================================================================= */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               {/* OWNER ADMIN BUTTON (Strictly for owner bankush014@gmail.com) */}
               {isOwnerAdmin && onOpenAdmin && (
                 <button
                   type="button"
                   onClick={onOpenAdmin}
-                  className="flex items-center gap-1.5 px-3 py-1.5 h-9 sm:h-9.5 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 hover:from-amber-500/35 hover:to-amber-600/35 border border-amber-400/80 text-amber-300 hover:text-amber-100 text-xs font-bold transition-all shadow-[0_0_14px_rgba(245,197,66,0.35)] hover:shadow-[0_0_22px_rgba(245,197,66,0.6)] active:scale-95 cursor-pointer shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-8.5 sm:h-9 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 hover:from-amber-500/35 hover:to-amber-600/35 border border-amber-400/80 text-amber-300 hover:text-amber-100 text-xs font-bold transition-all shadow-[0_0_14px_rgba(245,197,66,0.35)] hover:shadow-[0_0_22px_rgba(245,197,66,0.6)] active:scale-95 cursor-pointer shrink-0"
                   title="Open Admin Command Center"
                 >
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
@@ -486,54 +484,65 @@ export const Header: React.FC<HeaderProps> = ({
                 <Search className="w-4.5 h-4.5" />
               </button>
 
-              {/* PREMIUM WALLET PILL */}
-              <div className="relative shrink-0">
+              {/* PREMIUM WALLET PILL - Strictly visible ONLY when logged in (authenticated) */}
+              {isAuthenticated ? (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleWalletClick}
+                    onMouseEnter={() => setShowWalletTooltip(true)}
+                    onMouseLeave={() => setShowWalletTooltip(false)}
+                    className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-[#0B1030]/90 to-[#070B1F]/90 border border-[#F5C542]/50 hover:border-[#F5C542] shadow-[0_0_12px_rgba(245,197,66,0.18)] hover:shadow-[0_0_20px_rgba(245,197,66,0.4)] active:scale-95 transition-all cursor-pointer group backdrop-blur-md shrink-0 h-8.5 sm:h-9"
+                    title="Recharge Wallet"
+                    aria-label="Recharge Wallet"
+                  >
+                    {/* Glowing gold wallet icon */}
+                    <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F5C542] shrink-0 group-hover:scale-110 transition-transform" />
+                    
+                    {/* Accurate formatted currency balance */}
+                    <div className="flex items-baseline gap-0.5 font-mono">
+                      <span className="text-[11px] sm:text-xs font-bold text-white group-hover:text-[#F5C542] transition-colors whitespace-nowrap">
+                        {getCurrencySymbol(currentCurrency)}{Number(effectiveBalance || 0).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Round Gold Plus Button */}
+                    <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-gradient-to-tr from-[#F5C542] to-[#FFD86B] text-[#070B1F] font-black text-[10px] sm:text-xs flex items-center justify-center shadow-xs group-hover:rotate-90 transition-transform shrink-0">
+                      +
+                    </div>
+                  </button>
+
+                  {/* Floating Tooltip */}
+                  <AnimatePresence>
+                    {showWalletTooltip && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#0B1030] border border-[#F5C542]/40 text-slate-200 text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl z-50 pointer-events-none"
+                      >
+                        <span>Add funds to recharge wallet</span>
+                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#0B1030] border-t border-l border-[#F5C542]/40 rotate-45" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ) : onOpenLogin ? (
                 <button
                   type="button"
-                  onClick={handleWalletClick}
-                  onMouseEnter={() => setShowWalletTooltip(true)}
-                  onMouseLeave={() => setShowWalletTooltip(false)}
-                  className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-[#0B1030]/90 to-[#070B1F]/90 border border-[#F5C542]/50 hover:border-[#F5C542] shadow-[0_0_12px_rgba(245,197,66,0.18)] hover:shadow-[0_0_20px_rgba(245,197,66,0.4)] active:scale-95 transition-all cursor-pointer group backdrop-blur-md shrink-0 h-9 sm:h-9.5"
-                  title="Recharge Wallet"
-                  aria-label="Recharge Wallet"
+                  onClick={onOpenLogin}
+                  className="px-3 sm:px-3.5 py-1.5 h-8.5 sm:h-9 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-bold transition shadow-sm cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5"
                 >
-                  {/* Glowing gold wallet icon */}
-                  <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F5C542] shrink-0 group-hover:scale-110 transition-transform" />
-                  
-                  {/* Accurate formatted currency balance */}
-                  <div className="flex items-baseline gap-0.5 font-mono">
-                    <span className="text-[11px] sm:text-xs font-bold text-white group-hover:text-[#F5C542] transition-colors whitespace-nowrap">
-                      {getCurrencySymbol(currentCurrency)}{Number(effectiveBalance || 0).toFixed(2)}
-                    </span>
-                  </div>
-
-                  {/* Round Gold Plus Button */}
-                  <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-gradient-to-tr from-[#F5C542] to-[#FFD86B] text-[#070B1F] font-black text-[10px] sm:text-xs flex items-center justify-center shadow-xs group-hover:rotate-90 transition-transform shrink-0">
-                    +
-                  </div>
+                  <User className="w-3.5 h-3.5" />
+                  <span>Log In</span>
                 </button>
-
-                {/* Floating Tooltip */}
-                <AnimatePresence>
-                  {showWalletTooltip && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 5 }}
-                      className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-[#0B1030] border border-[#F5C542]/40 text-slate-200 text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl z-50 pointer-events-none"
-                    >
-                      <span>Add funds to recharge wallet</span>
-                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#0B1030] border-t border-l border-[#F5C542]/40 rotate-45" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              ) : null}
 
               {/* Automatic Country-Based Currency Display */}
-<div className="hidden xl:flex items-center shrink-0 px-2.5 py-1.5 h-9 rounded-xl text-xs font-bold text-slate-200 bg-white/[0.04] border border-white/10">
-  <span className="text-[#F5C542]">{currentCurrency}</span>
-  <span className="ml-1 text-slate-400">Auto</span>
-            </div>
+              <div className="hidden xl:flex items-center shrink-0 px-2.5 py-1.5 h-8.5 sm:h-9 rounded-xl text-xs font-bold text-slate-200 bg-white/[0.04] border border-white/10">
+                <span className="text-[#F5C542]">{currentCurrency}</span>
+                <span className="ml-1 text-slate-400 text-[10px]">Auto</span>
+              </div>
           </div>
         </div>
 
@@ -637,7 +646,6 @@ export const Header: React.FC<HeaderProps> = ({
                   { label: 'Love Compatibility Score', id: 'compatibility' },
                   { label: 'Consecrated Rituals & Spells', id: 'rituals' },
                   { label: 'LUMSIC Sacred Store (New)', id: 'shop' },
-                  { label: 'Articles, Vlogs & Guides', id: 'learn' },
                 ].map((item, idx) => (
                   <button
                     key={idx}

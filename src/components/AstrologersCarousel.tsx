@@ -9,6 +9,7 @@ interface AstrologersCarouselProps {
   onViewProfile: (reader: Reader) => void;
   onStartChat: (reader: Reader) => void;
   onExploreAll?: () => void;
+  onOpenSupport?: () => void;
   currentCurrency?: string;
 }
 
@@ -17,6 +18,7 @@ export const AstrologersCarousel: React.FC<AstrologersCarouselProps> = ({
   onViewProfile,
   onStartChat,
   onExploreAll,
+  onOpenSupport,
   currentCurrency = 'USD'
 }) => {
   // Default to 'love' as requested: love readings readers at the very top
@@ -301,32 +303,6 @@ export const AstrologersCarousel: React.FC<AstrologersCarouselProps> = ({
           )}
         </div>
 
-      </div>
-
-      {/* Floating WhatsApp & Call Quick Access Icons */}
-      <div className="fixed right-3 sm:right-5 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3 pointer-events-auto">
-        <a
-          href="https://wa.me/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-11 h-11 rounded-full bg-[#25D366] hover:bg-[#20ba59] text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-          title="Chat on WhatsApp"
-          aria-label="WhatsApp Support"
-        >
-          <MessageCircle className="w-6 h-6 fill-current" />
-        </a>
-        <button
-          type="button"
-          onClick={() => {
-            const firstOnline = readers.find(r => r.isOnline) || readers[0];
-            onStartChat(firstOnline);
-          }}
-          className="w-11 h-11 rounded-full bg-gray-900 hover:bg-gray-800 text-white flex items-center justify-center shadow-lg shadow-black/30 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-          title="Instant Chat Consultation"
-          aria-label="Chat Support"
-        >
-          <MessageCircle className="w-5 h-5 fill-current" />
-        </button>
       </div>
     </section>
   );

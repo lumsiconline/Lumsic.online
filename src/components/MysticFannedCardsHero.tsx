@@ -149,11 +149,6 @@ export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
     setStep((prev) => prev + diff);
   };
 
-  // Determine which card is currently in the center slot (slot 2)
-  // (cardIndex + step) % 5 === 2 => cardIndex = (2 - (step % 5) + 5) % 5
-  const centerCardIndex = ((2 - (step % 5)) + 5) % 5;
-  const activeCenterCard = DECK[centerCardIndex];
-
   const handleCardAction = (card: DeckCard) => {
     if (card.id === 'love-life' && onOpenCompatibility) {
       onOpenCompatibility();
@@ -332,40 +327,6 @@ export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
             </div>
           );
         })}
-      </div>
-
-      {/* 4. THREE STEPPER PILLS BELOW DECK TO JUMP TO LOVE LIFE • CAREER • LIFE */}
-      <div className="absolute -bottom-3 inset-x-0 flex flex-col items-center justify-center gap-1.5 z-40">
-        
-        {/* Quick Stepper Pills */}
-        <div className="flex items-center gap-2 bg-[#060A1C]/90 p-1 rounded-full border border-amber-300/30 backdrop-blur-md shadow-xl">
-          {DECK.slice(0, 3).map((card, idx) => {
-            const isCurrentlyCenter = centerCardIndex === idx;
-
-            return (
-              <button
-                key={card.id}
-                type="button"
-                onClick={() => jumpToCard(idx)}
-                className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isCurrentlyCenter
-                    ? 'bg-gradient-to-r from-[#F6D06E] to-[#E5B744] text-[#070B1E] shadow-sm scale-105 font-extrabold'
-                    : 'text-slate-400 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <span>{card.iconSymbol}</span>
-                <span>{card.title}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Real-time Motion indicator */}
-        <div className="flex items-center gap-2 text-[10px] text-amber-300/75 font-mono tracking-wider">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-          <span>Cards Automatically Gliding Left → Right (1x Speed)</span>
-        </div>
-
       </div>
 
     </div>

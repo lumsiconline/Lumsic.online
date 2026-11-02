@@ -1,5 +1,5 @@
 import { 
-  X, Headphones, Wallet, Clock, Gift, Settings, Edit3, LogOut, ShieldCheck, ChevronRight, Share2, MessageSquare, Compass 
+  X, Headphones, Wallet, Clock, Gift, Settings, Edit3, LogOut, ShieldCheck, ChevronRight, Share2, MessageSquare, Compass, ShoppingBag 
 } from 'lucide-react';
 import { CustomerProfile } from '../types';
 
@@ -16,6 +16,7 @@ interface NavigationDrawerProps {
   onOpenSupport: () => void;
   onOpenRedeem: () => void;
   onOpenSettings: () => void;
+  onOpenShop?: () => void;
   onLogout: () => void;
   onOpenFreeChat?: () => void;
   onOpenAdmin?: () => void;
@@ -36,6 +37,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenSupport,
   onOpenRedeem,
   onOpenSettings,
+  onOpenShop,
   onLogout,
   onOpenFreeChat,
   onOpenAdmin,
@@ -59,6 +61,16 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     : (isAuthenticated ? 'Profile Active' : 'Tap to sign in');
 
   const menuItems = [
+    {
+      id: 'shop',
+      label: 'Cosmic Shop & Remedies (New)',
+      icon: ShoppingBag,
+      action: () => {
+        onClose();
+        if (onOpenShop) onOpenShop();
+        else window.dispatchEvent(new CustomEvent('open_shop_page'));
+      }
+    },
     {
       id: 'support',
       label: 'Customer Support Desk (24/7)',

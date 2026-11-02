@@ -40,6 +40,7 @@ import { SupportChatModal } from './components/SupportChatModal';
 import { RedeemGiftCardModal } from './components/RedeemGiftCardModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { ViewAllReadersPage } from './components/ViewAllReadersPage';
+import { AstralStoreWhiteView } from './components/AstralStoreWhiteView';
 import { LegalPolicyPage, PolicyPageId } from './components/LegalPolicyPage';
 import { detectUserGeo, CountryInfo } from './utils/currency';
 import { Reader, ConsultationSession, CustomerProfile, ConsultationStartData, ChatMessage } from './types';
@@ -97,6 +98,14 @@ export default function App() {
   const [authRedirectTarget, setAuthRedirectTarget] = useState<AuthRedirectTarget | null>(null);
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
   const [activePolicyPage, setActivePolicyPage] = useState<PolicyPageId | null>(null);
+  const [isShopOpen, setIsShopOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      return hash === '#shop' || hash === '#store' || params.get('tab') === 'shop' || params.get('shop') === 'true';
+    }
+    return false;
+  });
 
   // Trigger popup screen for Birth Chart
   const handleOpenBirthChart = () => {
@@ -542,6 +551,7 @@ export default function App() {
     setIsExplorerOpen(false);
     setIsBirthChartModalOpen(false);
     setIsChatOpen(false);
+    setIsShopOpen(false);
     setCurrentSection('home');
     setNavHistory(['home']);
     window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
@@ -562,6 +572,11 @@ export default function App() {
 
     if (sectionId === 'all-readers') {
       setIsViewAllOpen(true);
+      return;
+    }
+
+    if (sectionId === 'shop' || sectionId === 'astral-shop' || sectionId === 'store') {
+      setIsShopOpen(true);
       return;
     }
 
@@ -600,10 +615,8 @@ export default function App() {
       setIsHoroscopeModalOpen(true);
       return;
     }
-    if (sectionId === 'rituals' || sectionId === 'spells' || sectionId === 'healing' || sectionId === 'shop' || sectionId === 'astral-shop') {
-      const targetTab: 'spell' | 'healing' | 'shop' = 
-        (sectionId === 'shop' || sectionId === 'astral-shop') ? 'shop' : 
-        sectionId === 'healing' ? 'healing' : 'spell';
+    if (sectionId === 'rituals' || sectionId === 'spells' || sectionId === 'healing') {
+      const targetTab: 'spell' | 'healing' = sectionId === 'healing' ? 'healing' : 'spell';
       setRitualsInitialTab(targetTab);
       window.dispatchEvent(new CustomEvent('switch_rituals_tab', { detail: { tab: targetTab } }));
 
@@ -837,12 +850,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF8DF] text-[#2B2418] flex flex-col font-sans selection:bg-[#F4E7B8] selection:text-[#2B2418] relative">
+    <div className="min-h-screen bg-[#FFF8DF] text-[#2B2418] flex flex-col font-sans selection:bg-[#F4E7B8] selection:text-[#2B2418] relative w-full max-w-full overflow-x-clip">
       {/* Background Star Layer */}
       <StarryBackground density="dense" className="fixed inset-0 z-0 opacity-40 pointer-events-none" />
 
       {/* TOP STICKY BAR: ROTATING MARQUEE TICKER AT VERY TOP + GLOBAL LUXURY HEADER */}
-      <div className="sticky top-0 z-40 shadow-md shadow-amber-950/10">
+      <div className="sticky top-0 z-40 shadow-md shadow-amber-950/10 w-full max-w-full overflow-x-clip">
         <OfferBanner onClaimOffer={() => handleNavigateSection('readers')} />
         <Header
           onStartReading={() => handleNavigateSection('readers')}
@@ -911,6 +924,7 @@ export default function App() {
             onViewProfile={(reader) => setSelectedProfileReader(reader)}
             onStartChat={handleInitiateChatWithReader}
             onExploreAll={() => setIsViewAllOpen(true)}
+            onOpenSupport={() => setIsSupportOpen(true)}
             currentCurrency={currentCurrency}
           />
         </div>
@@ -1115,6 +1129,7 @@ export default function App() {
         onOpenSupport={() => setIsSupportOpen(true)}
         onOpenRedeem={() => setIsRedeemOpen(true)}
         onOpenSettings={() => setIsDashboardOpen(true)}
+        onOpenShop={() => setIsShopOpen(true)}
         onLogout={async () => {
           await signOutUser();
           localStorage.removeItem('astral_is_logged_in');
@@ -1266,6 +1281,16 @@ export default function App() {
           setCustomer(prev => ({ ...prev, name, phone }));
         }}
       />
+
+      {/* DEDICATED COSMIC SHOP & FESTIVE BESTSELLERS STORE SCREEN */}
+      {isShopOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-white">
+          <AstralStoreWhiteView
+            onGoBack={() => setIsShopOpen(false)}
+            currentCurrency={currentCurrency}
+          />
+        </div>
+      )}
 
       {/* VIEW ALL 100+ ASTROLOGERS DIRECTORY OVERLAY */}
       {isViewAllOpen && (
