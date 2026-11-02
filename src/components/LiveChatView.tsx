@@ -8,7 +8,7 @@ import {
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { 
   Send, 
   X, 
@@ -18,22 +18,12 @@ import {
   Clock, 
   Shield, 
   CheckCheck, 
-  Check, 
   Compass, 
-  User, 
-  Calendar, 
-  MapPin, 
   Info, 
-  Heart, 
-  Volume2, 
-  VolumeX, 
-  AlertCircle,
-  ThumbsUp,
   Award,
-  ChevronDown,
-  ChevronUp,
-  MessageCircle,
-  Smile
+  AlertCircle,
+  RefreshCw,
+  MessageCircle
 } from 'lucide-react';
 
 interface LiveChatViewProps {
@@ -46,10 +36,10 @@ interface LiveChatViewProps {
 }
 
 const QUICK_INQUIRIES = [
-  '✨ Will I find my true soulmate or life partner this year?',
-  '💼 What career shifts and opportunities are indicated for me?',
-  '🌟 What spiritual remedies can remove obstacles right now?',
-  '🪐 How are my current planetary transits affecting my mind and finances?'
+  '✨ Will I find my true soulmate this year?',
+  '💼 What career shifts are indicated for me?',
+  '🌟 What spiritual remedies can remove obstacles?',
+  '🪐 How are my current planetary transits affecting me?'
 ];
 
 const CELESTIAL_SYMBOLS = ['✨', '🌟', '🔮', '🌙', '🪐', '☀️', '💖', '🕊️'];
@@ -66,16 +56,17 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showBirthDetails, setShowBirthDetails] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(initialSession.status === 'completed');
+  
+  // If previously completed, allow user to resume or keep active
+  const [isCompleted, setIsCompleted] = useState<boolean>(false);
+  
   const [rating, setRating] = useState<number>(5);
   const [selectedTag, setSelectedTag] = useState<string>('Accurate & Insightful');
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastMessageCountRef = useRef(messages.length);
 
   // Live timer tick
@@ -84,25 +75,36 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Format elapsed consultation duration
-  const elapsedDuration = useMemo(() => {
-    const start = session.acceptedAt || session.createdAt || session.startTime;
-    if (!start) return '00:00';
-    const totalSecs = Math.max(0, Math.floor((now - new Date(start).getTime()) / 1000));
-    const mins = Math.floor(totalSecs / 60);
-    const secs = totalSecs % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }, [now, session.acceptedAt, session.createdAt, session.startTime]);
+  // Find first message from astrologer/reader
+  const firstAstrologerMessage = useMemo(() => {
+    return (messages || []).find(m => m.sender === 'astrologer' && !m.isSystemNotice);
+  }, [messages]);
 
-  const playChime = () => {
-    if (!soundEnabled) return;
-    try {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      }
-    } catch {}
-  };
+  const hasAstrologerReplied = Boolean(firstAstrologerMessage);
+
+  // 3-Minute Free Chat Countdown Timer (180 seconds)
+  // Back counting starts ONLY when astrologer attends and sends 1st message!
+  const countdownSecondsRemaining = useMemo(() => {
+    const TOTAL_FREE_SECONDS = 180; // 3 minutes free chat
+
+    // If astrologer has not sent their 1st message yet, timer stays at 03:00 (180s)
+    if (!firstAstrologerMessage?.timestamp) {
+      return TOTAL_FREE_SECONDS;
+    }
+
+    const replyTime = new Date(firstAstrologerMessage.timestamp).getTime();
+    const elapsedSeconds = Math.max(0, Math.floor((now - replyTime) / 1000));
+    return Math.max(0, TOTAL_FREE_SECONDS - elapsedSeconds);
+  }, [now, firstAstrologerMessage]);
+
+  // Formatted countdown: "03:00", "02:59", etc.
+  const formattedCountdown = useMemo(() => {
+    const mins = Math.floor(countdownSecondsRemaining / 60);
+    const secs = countdownSecondsRemaining % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [countdownSecondsRemaining]);
+
+  const isFreeTimeExpired = hasAstrologerReplied && countdownSecondsRemaining === 0;
 
   // =========================================================================
   // REAL-TIME FIRESTORE & SERVER CONNECTIVITY
@@ -119,15 +121,8 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           if (remote && remote.id === session.id) {
             setSession(curr => ({ ...curr, ...remote }));
             if (remote.messages && remote.messages.length > lastMessageCountRef.current) {
-              const latestMsg = remote.messages[remote.messages.length - 1];
-              if (latestMsg && latestMsg.sender === 'astrologer') {
-                playChime();
-              }
               lastMessageCountRef.current = remote.messages.length;
               setMessages(remote.messages);
-            }
-            if (remote.status === 'completed') {
-              setIsCompleted(true);
             }
           }
         }
@@ -150,12 +145,9 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
             if (msg.sessionId === session.id) {
               setMessages(prev => {
                 if (prev.some(m => m.id === msg.id)) return prev;
-                if (msg.sender === 'astrologer') playChime();
                 return [...prev, msg];
               });
             }
-          } else if (type === 'session_completed' && payload?.id === session.id) {
-            setIsCompleted(true);
           }
         };
       }
@@ -175,9 +167,6 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
             if (Array.isArray(data.session.messages) && data.session.messages.length > lastMessageCountRef.current) {
               lastMessageCountRef.current = data.session.messages.length;
               setMessages(data.session.messages);
-            }
-            if (data.session.status === 'completed') {
-              setIsCompleted(true);
             }
           }
         }
@@ -201,7 +190,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   // =========================================================================
   const handleSend = async (textToSend?: string) => {
     const rawText = textToSend || inputText;
-    if (!rawText.trim() || isSending || isCompleted) return;
+    if (!rawText.trim() || isSending) return;
 
     const cleanText = rawText.trim();
     setInputText('');
@@ -290,365 +279,406 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   };
 
   const birthDetails = session.birthDetails;
+  const astrologerName = session.requestedReaderName || session.assignedReaderName || reader.name;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl overflow-hidden font-sans animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex flex-col w-full h-[100dvh] bg-white text-gray-900 font-sans overflow-hidden">
       
-      {/* Hidden audio element for chime */}
-      <audio 
-        ref={audioRef} 
-        src="/assets/aistudio/mixkit-marimba-waiting-ringtone-1360_715cddd4.wav" 
-        preload="auto" 
-      />
-
-      {/* Main Luxury Consultation Container */}
-      <div className="w-full h-full sm:max-w-2xl sm:h-[94vh] bg-[#0A0D18] text-white sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden relative border border-amber-500/20 sm:ring-1 sm:ring-amber-500/30">
+      {/* =================================================================== */}
+      {/* 1. TOP HEADER: PROPERLY ASSIGNED PURPLE HEADER (FIT TO SCREEN) */}
+      {/* =================================================================== */}
+      <header className="bg-gradient-to-r from-[#4C1D95] via-[#5B21B6] to-[#6D28D9] text-white px-3 sm:px-5 py-2.5 shrink-0 flex items-center justify-between gap-2 shadow-md z-20">
         
-        {/* =================================================================== */}
-        {/* 1. TOP HEADER: ASTROLOGER HERO & LIVE CONNECTION STATUS */}
-        {/* =================================================================== */}
-        <header className="bg-gradient-to-r from-[#11162B] via-[#0E1325] to-[#120F24] border-b border-amber-500/20 px-4 py-3 shrink-0 flex items-center justify-between gap-3 shadow-lg z-20">
-          
-          {/* Reader Profile Strip */}
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={onCloseChat}
-              className="p-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/60"
-              title="Close window (consultation remains active)"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
+        {/* Left: Back Button, Avatar, Full Astrologer Name & Status */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={onCloseChat}
+            className="p-1.5 -ml-1 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer shrink-0"
+            title="Back to Sanctuary"
+            aria-label="Back"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
 
-            <div className="relative shrink-0">
-              <div className="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-amber-400/60 shadow-md shadow-amber-500/10">
-                <img 
-                  src={reader.avatar} 
-                  alt={reader.name} 
-                  className="w-full h-full object-cover" 
-                />
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-[#0A0D18]"></span>
-              </span>
+          {/* Astrologer Avatar with Active Status Indicator */}
+          <div className="relative shrink-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden ring-2 ring-white/60 shadow-sm">
+              <img 
+                src={reader.avatar} 
+                alt={astrologerName} 
+                className="w-full h-full object-cover" 
+              />
             </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-white tracking-wide truncate">
-                  {session.requestedReaderName || reader.name}
-                </h2>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shrink-0">
-                  <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                  <span>Verified</span>
-                </span>
-              </div>
-              
-              <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-                <span className="truncate text-amber-200/80 text-[11px]">
-                  {reader.category || 'Spiritual Guide'}
-                </span>
-                <span className="text-slate-600">•</span>
-                <div className="flex items-center gap-1 text-[11px] text-amber-400">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  <span>{reader.rating || 4.98}</span>
-                </div>
-              </div>
-            </div>
+            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#5B21B6]"></span>
           </div>
 
-          {/* Consultation Status & Top Tools */}
-          <div className="flex items-center gap-2 shrink-0">
-            
-            {/* Live Timer Pill */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900/90 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold shadow-xs">
-              <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
-              <span>{elapsedDuration}</span>
-            </div>
-
-            {/* Sound Toggle */}
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-amber-300 transition cursor-pointer border border-slate-800"
-              title={soundEnabled ? 'Mute Chimes' : 'Unmute Chimes'}
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
-            </button>
-
-            {/* Birth Details Toggle */}
-            {birthDetails && (
-              <button
-                onClick={() => setShowBirthDetails(!showBirthDetails)}
-                className={`p-2 rounded-xl transition cursor-pointer border ${
-                  showBirthDetails
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
-                title="View your submitted Birth Details"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* End Consultation Button */}
-            {!isCompleted ? (
-              <button
-                onClick={() => setShowEndConfirm(true)}
-                className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-rose-200 text-xs font-bold transition cursor-pointer"
-              >
-                End
-              </button>
-            ) : (
-              <span className="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">
-                Concluded
+          {/* Astrologer Details: Full Name (No truncation) & Rating */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight truncate leading-tight">
+                {astrologerName}
+              </h1>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-400/25 text-amber-200 border border-amber-300/40 shrink-0 hidden xs:inline-flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                <span>Verified Guide</span>
               </span>
-            )}
-
-          </div>
-
-        </header>
-
-        {/* =================================================================== */}
-        {/* 2. OPTIONAL BIRTH DETAILS COLLAPSIBLE DRAWER */}
-        {/* =================================================================== */}
-        {showBirthDetails && birthDetails && (
-          <div className="bg-[#12162A] border-b border-amber-500/20 p-3.5 text-xs text-slate-300 animate-in slide-in-from-top-2 duration-150">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Compass className="w-3.5 h-3.5 text-amber-400" />
-                <span>Your Chart Intake Details</span>
-              </span>
-              <button 
-                onClick={() => setShowBirthDetails(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
             </div>
             
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Name</span>
-                <strong className="text-white truncate block">{birthDetails.name || session.customerName}</strong>
-              </div>
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Date of Birth</span>
-                <strong className="text-white truncate block">{birthDetails.dob || 'Not specified'}</strong>
-              </div>
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Birth Time</span>
-                <strong className="text-white truncate block">{birthDetails.birthTime || 'Unknown'}</strong>
-              </div>
-              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-500 block">Place of Birth</span>
-                <strong className="text-white truncate block">{birthDetails.placeOfBirth || 'Not specified'}</strong>
+            <div className="flex items-center gap-2 text-xs text-purple-200 mt-0.5">
+              <span className="text-[11px] sm:text-xs truncate text-purple-100">
+                {reader.category || 'Vedic & Psychic Guidance'}
+              </span>
+              <span className="text-purple-300">•</span>
+              <div className="flex items-center gap-1 text-[11px] text-amber-300 font-medium shrink-0">
+                <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                <span>{reader.rating || 4.98}</span>
               </div>
             </div>
           </div>
-        )}
-
-        {/* =================================================================== */}
-        {/* 3. CHAT MESSAGES STREAM */}
-        {/* =================================================================== */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-[#0A0D18] via-[#0D1020] to-[#0A0D18]">
-          
-          {/* Sanctuary Introduction Card */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/30 via-slate-900/70 to-indigo-950/30 border border-amber-500/20 text-center max-w-md mx-auto shadow-sm">
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 mx-auto flex items-center justify-center mb-2">
-              <Sparkles className="w-5 h-5 text-amber-400" />
-            </div>
-            <h3 className="text-xs font-bold text-amber-200">
-              Personal Sanctuary with {session.requestedReaderName || reader.name}
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-              Your consultation is active and protected. Ask freely about love, destiny, career, or remedies.
-            </p>
-            <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-slate-500">
-              <Shield className="w-3 h-3 text-emerald-400" />
-              <span>Encrypted 1-on-1 Sanctuary</span>
-              <span>•</span>
-              <span className="text-emerald-400 font-medium">Reader Connected</span>
-            </div>
-          </div>
-
-          {/* Render All Messages */}
-          {messages.map((msg, index) => {
-            const isCustomer = msg.sender === 'customer';
-            const isSystem = msg.sender === 'system' || msg.isSystemNotice;
-
-            if (isSystem) {
-              return (
-                <div key={msg.id || index} className="flex justify-center my-2">
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 border border-amber-500/20 text-[11px] text-amber-300/90 shadow-xs">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>{msg.text}</span>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div 
-                key={msg.id || index}
-                className={`flex gap-2.5 items-end ${isCustomer ? 'justify-end' : 'justify-start'}`}
-              >
-                {/* Astrologer mini avatar */}
-                {!isCustomer && (
-                  <img 
-                    src={reader.avatar} 
-                    alt={reader.name} 
-                    className="w-7 h-7 rounded-xl object-cover shrink-0 ring-1 ring-amber-400/40 mb-1" 
-                  />
-                )}
-
-                <div className={`max-w-[82%] sm:max-w-[75%] flex flex-col ${isCustomer ? 'items-end' : 'items-start'}`}>
-                  
-                  {/* Sender Name & Time */}
-                  <div className="flex items-center gap-1.5 px-1 mb-1 text-[10px] text-slate-500">
-                    <span className="font-semibold text-slate-400">
-                      {isCustomer ? 'You' : (msg.senderName || reader.name)}
-                    </span>
-                    <span>•</span>
-                    <span>
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-
-                  {/* Message Bubble */}
-                  <div className={`px-4 py-2.5 rounded-2xl text-xs sm:text-[13px] leading-relaxed whitespace-pre-line shadow-md ${
-                    isCustomer
-                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-medium rounded-br-xs'
-                      : 'bg-[#151A30] border border-slate-700/70 text-slate-100 rounded-bl-xs'
-                  }`}>
-                    {msg.text}
-                  </div>
-
-                  {/* Delivery status for user messages */}
-                  {isCustomer && (
-                    <div className="flex items-center gap-1 mt-0.5 px-1 text-[10px] text-amber-400/80">
-                      <CheckCheck className="w-3 h-3" />
-                      <span>Delivered</span>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            );
-          })}
-
-          <div ref={messagesEndRef} />
         </div>
 
-        {/* =================================================================== */}
-        {/* 4. QUICK INQUIRY CHIPS (Shown when chat is active) */}
-        {/* =================================================================== */}
-        {!isCompleted && messages.length <= 4 && (
-          <div className="px-3.5 py-2 bg-[#0E1222] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
-            <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider shrink-0">Ask Guide:</span>
-            {QUICK_INQUIRIES.map((inquiry, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSend(inquiry)}
-                className="text-[11px] bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white px-3 py-1 rounded-xl border border-slate-700/60 shrink-0 transition cursor-pointer"
-              >
-                {inquiry}
-              </button>
-            ))}
+        {/* Right: Timer, Info (Birth Details), End Button (Notification toggle REMOVED) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          
+          {/* 3-Minute Free Countdown Timer Pill (Starts when astrologer sends 1st message) */}
+          <div 
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold border transition ${
+              isFreeTimeExpired
+                ? 'bg-rose-500/30 text-rose-200 border-rose-300 animate-pulse'
+                : hasAstrologerReplied
+                ? 'bg-amber-400/25 text-amber-200 border-amber-300/40 shadow-xs'
+                : 'bg-white/15 text-white/90 border-white/20'
+            }`}
+            title={
+              hasAstrologerReplied
+                ? `Free consultation time remaining: ${formattedCountdown}`
+                : `Free 3-minute countdown begins when ${astrologerName} sends first message`
+            }
+          >
+            <Clock className={`w-3.5 h-3.5 ${hasAstrologerReplied ? 'text-amber-300' : 'text-yellow-300'}`} />
+            <span>{formattedCountdown}</span>
+            {!hasAstrologerReplied && (
+              <span className="text-[10px] uppercase font-sans font-semibold text-amber-200 hidden xs:inline">
+                Free
+              </span>
+            )}
           </div>
-        )}
 
-        {/* =================================================================== */}
-        {/* 5. INPUT COMPOSER BAR */}
-        {/* =================================================================== */}
-        {!isCompleted ? (
-          <div className="p-3 bg-[#0B0E1C] border-t border-amber-500/20 shrink-0">
-            
-            {/* Quick Symbol bar */}
-            <div className="flex items-center gap-1 mb-2 px-1">
-              <span className="text-[10px] text-slate-500 font-medium mr-1">Symbols:</span>
-              {CELESTIAL_SYMBOLS.map((sym, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setInputText(prev => prev + sym)}
-                  className="p-1 hover:bg-slate-800 rounded-lg text-xs transition cursor-pointer"
-                >
-                  {sym}
-                </button>
-              ))}
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-              className="flex items-center gap-2"
+          {/* Birth Details Info Button */}
+          {birthDetails && (
+            <button
+              type="button"
+              onClick={() => setShowBirthDetails(!showBirthDetails)}
+              className={`p-1.5 rounded-full transition cursor-pointer ${
+                showBirthDetails
+                  ? 'bg-white text-purple-900 shadow-sm'
+                  : 'bg-white/10 hover:bg-white/20 text-white'
+              }`}
+              title="View your submitted birth chart details"
+              aria-label="Birth Details"
             >
-              <input
-                type="text"
-                placeholder={`Ask ${session.requestedReaderName || reader.name} anything...`}
-                value={inputText}
-                onChange={e => setInputText(e.target.value)}
-                className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition"
-                autoFocus
-              />
+              <Info className="w-4 h-4" />
+            </button>
+          )}
 
-              <button
-                type="submit"
-                disabled={!inputText.trim() || isSending}
-                className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer shrink-0"
-              >
-                <span>Send</span>
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
+          {/* End Consultation Button */}
+          {!isCompleted ? (
+            <button
+              type="button"
+              onClick={() => setShowEndConfirm(true)}
+              className="px-3 py-1 rounded-full bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+            >
+              End
+            </button>
+          ) : (
+            <span className="px-2.5 py-1 rounded-full bg-white/20 text-white/90 text-xs font-medium">
+              Concluded
+            </span>
+          )}
 
-            <div className="text-center text-[10px] text-slate-500 mt-1.5">
-              Live sanctuary consultation • Responses are provided directly by verified astrologers
+        </div>
+
+      </header>
+
+      {/* =================================================================== */}
+      {/* 2. OPTIONAL BIRTH DETAILS CARD (COLLAPSIBLE) */}
+      {/* =================================================================== */}
+      {showBirthDetails && birthDetails && (
+        <div className="bg-purple-50 border-b border-purple-200 px-4 py-3 text-xs text-purple-950 animate-in slide-in-from-top-2 duration-150 shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-purple-700" />
+              <span>Your Chart Details Shared with {astrologerName}</span>
+            </span>
+            <button 
+              onClick={() => setShowBirthDetails(false)}
+              className="text-purple-600 hover:text-purple-900 p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            <div className="bg-white p-2 rounded-xl border border-purple-200/80 shadow-xs">
+              <span className="text-[10px] text-gray-500 block">Name</span>
+              <strong className="text-gray-900 truncate block">{birthDetails.name || session.customerName}</strong>
+            </div>
+            <div className="bg-white p-2 rounded-xl border border-purple-200/80 shadow-xs">
+              <span className="text-[10px] text-gray-500 block">Date of Birth</span>
+              <strong className="text-gray-900 truncate block">{birthDetails.dob || 'Not specified'}</strong>
+            </div>
+            <div className="bg-white p-2 rounded-xl border border-purple-200/80 shadow-xs">
+              <span className="text-[10px] text-gray-500 block">Birth Time</span>
+              <strong className="text-gray-900 truncate block">{birthDetails.birthTime || 'Unknown'}</strong>
+            </div>
+            <div className="bg-white p-2 rounded-xl border border-purple-200/80 shadow-xs">
+              <span className="text-[10px] text-gray-500 block">Place of Birth</span>
+              <strong className="text-gray-900 truncate block">{birthDetails.placeOfBirth || 'Not specified'}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* 3. CHAT MESSAGES STREAM (WHITE BACKGROUND, CLEAN PURPLE ACCENTS) */}
+      {/* =================================================================== */}
+      <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 bg-[#F8F9FD]">
+        
+        {/* Sanctuary Welcome Card */}
+        <div className="p-4 rounded-2xl bg-white border border-purple-100 text-center max-w-md mx-auto shadow-xs">
+          <div className="w-9 h-9 rounded-full bg-purple-50 border border-purple-200 mx-auto flex items-center justify-center mb-2">
+            <Sparkles className="w-4 h-4 text-purple-700" />
+          </div>
+          <h2 className="text-xs font-bold text-purple-950">
+            Consultation Sanctuary with {astrologerName}
+          </h2>
+          <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+            Your consultation is active and private. Ask freely about love, destiny, career, or remedies.
+          </p>
+          <div className="mt-2.5 flex items-center justify-center gap-2 text-[10px] text-gray-500">
+            <Shield className="w-3 h-3 text-emerald-600" />
+            <span className="font-medium text-gray-700">Confidential Session</span>
+            <span>•</span>
+            <span className="text-emerald-700 font-semibold">Astrologer Online</span>
+          </div>
+        </div>
+
+        {/* 3-Minute Free Chat Dynamic Timer Banner */}
+        {!hasAstrologerReplied ? (
+          <div className="flex justify-center my-1">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50/90 border border-amber-200 text-xs text-amber-900 shadow-2xs">
+              <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Free 3-minute countdown starts when <strong>{astrologerName}</strong> sends their 1st reply</span>
+            </div>
+          </div>
+        ) : isFreeTimeExpired ? (
+          <div className="flex justify-center my-1">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-xs text-rose-900 shadow-2xs font-semibold animate-pulse">
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span>Free 3 minutes completed. Your live reading continues.</span>
             </div>
           </div>
         ) : (
-          /* Concluded Banner */
-          <div className="p-4 bg-[#0E1222] border-t border-slate-800 text-center shrink-0">
-            <p className="text-xs text-slate-400">
-              This consultation has concluded. We hope the cosmic reading brought you clarity.
-            </p>
+          <div className="flex justify-center my-1">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 shadow-2xs font-medium">
+              <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>3-Minute Free Consultation Active: <strong>{formattedCountdown}</strong> remaining</span>
+            </div>
+          </div>
+        )}
+
+        {/* Message Bubbles */}
+        {messages.map((msg, index) => {
+          const isCustomer = msg.sender === 'customer';
+          const isSystem = msg.sender === 'system' || msg.isSystemNotice;
+
+          if (isSystem) {
+            return (
+              <div key={msg.id || index} className="flex justify-center my-2">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200 text-[11px] text-purple-900 shadow-xs">
+                  <Sparkles className="w-3 h-3 text-purple-600" />
+                  <span>{msg.text}</span>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div 
+              key={msg.id || index}
+              className={`flex gap-2 items-end ${isCustomer ? 'justify-end' : 'justify-start'}`}
+            >
+              {/* Astrologer mini avatar */}
+              {!isCustomer && (
+                <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 ring-1 ring-purple-300 mb-1">
+                  <img 
+                    src={reader.avatar} 
+                    alt={astrologerName} 
+                    className="w-full h-full object-cover" 
+                  />
+                </div>
+              )}
+
+              <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${isCustomer ? 'items-end' : 'items-start'}`}>
+                
+                {/* Sender Name & Time */}
+                <div className="flex items-center gap-1.5 px-1 mb-1 text-[10px] text-gray-400">
+                  <span className="font-semibold text-gray-600">
+                    {isCustomer ? 'You' : (msg.senderName || astrologerName)}
+                  </span>
+                  <span>•</span>
+                  <span>
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                {/* Message Bubble: User is Vibrant Purple, Astrologer is White Card */}
+                <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-line shadow-xs ${
+                  isCustomer
+                    ? 'bg-[#6D28D9] text-white rounded-tr-xs font-normal'
+                    : 'bg-white text-gray-900 border border-purple-100/90 rounded-tl-xs shadow-xs'
+                }`}>
+                  {msg.text}
+                </div>
+
+                {/* Delivery status for user messages */}
+                {isCustomer && (
+                  <div className="flex items-center gap-1 mt-0.5 px-1 text-[10px] text-purple-600 font-medium">
+                    <CheckCheck className="w-3 h-3" />
+                    <span>Delivered</span>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          );
+        })}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* =================================================================== */}
+      {/* 4. QUICK INQUIRY SUGGESTIONS CHIPS */}
+      {/* =================================================================== */}
+      {!isCompleted && messages.length <= 4 && (
+        <div className="px-3.5 py-2 bg-purple-50/70 border-t border-purple-100 flex items-center gap-1.5 overflow-x-auto shrink-0">
+          <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider shrink-0">Suggestions:</span>
+          {QUICK_INQUIRIES.map((inquiry, idx) => (
             <button
+              key={idx}
+              type="button"
+              onClick={() => handleSend(inquiry)}
+              className="text-[11px] bg-white hover:bg-purple-100 text-purple-800 px-3 py-1 rounded-full border border-purple-200 shrink-0 transition cursor-pointer shadow-2xs"
+            >
+              {inquiry}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* 5. WHITE COMPOSER BAR & PURPLE ACTION BUTTON */}
+      {/* =================================================================== */}
+      {!isCompleted ? (
+        <div className="p-3 bg-white border-t border-purple-100 shrink-0">
+          
+          {/* Quick Symbol bar */}
+          <div className="flex items-center gap-1 mb-2 px-1">
+            <span className="text-[10px] text-gray-500 font-medium mr-1">Symbols:</span>
+            {CELESTIAL_SYMBOLS.map((sym, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setInputText(prev => prev + sym)}
+                className="p-1 hover:bg-purple-50 rounded-lg text-xs transition cursor-pointer"
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              placeholder={`Type your message for ${astrologerName}...`}
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              className="flex-1 bg-gray-50 border border-purple-200 text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-400 rounded-full px-4 py-2.5 text-sm transition"
+              autoFocus
+            />
+
+            <button
+              type="submit"
+              disabled={!inputText.trim() || isSending}
+              className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold text-sm transition flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer shrink-0"
+            >
+              <span>Send</span>
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </form>
+
+          <div className="text-center text-[10px] text-gray-400 mt-1.5">
+            Real-time consultation • All messages are securely routed to verified astrologers
+          </div>
+        </div>
+      ) : (
+        /* Concluded Banner with option to restart */
+        <div className="p-4 bg-purple-50 border-t border-purple-200 text-center shrink-0">
+          <p className="text-xs text-purple-900 font-medium">
+            This consultation has concluded. We hope your reading brought you peace and clarity.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-2.5">
+            <button
+              type="button"
+              onClick={() => setIsCompleted(false)}
+              className="px-4 py-2 rounded-full bg-white border border-purple-300 text-purple-800 font-semibold text-xs hover:bg-purple-100 transition cursor-pointer"
+            >
+              Resume Consultation
+            </button>
+            <button
+              type="button"
               onClick={onCloseChat}
-              className="mt-2.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md"
+              className="px-4 py-2 rounded-full bg-[#6D28D9] text-white font-bold text-xs hover:bg-purple-800 transition cursor-pointer shadow-sm"
             >
               Return to Sanctuary
             </button>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* CONFIRM END CONSULTATION MODAL */}
       {/* =================================================================== */}
       {showEndConfirm && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-[#0E1325] border border-amber-500/30 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 mx-auto flex items-center justify-center mb-3">
-              <AlertCircle className="w-6 h-6 text-rose-400" />
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-purple-200 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-50 border border-rose-200 mx-auto flex items-center justify-center mb-3">
+              <AlertCircle className="w-6 h-6 text-rose-600" />
             </div>
-            <h3 className="text-base font-bold text-white">End Consultation?</h3>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              Are you sure you want to conclude your live reading with {session.requestedReaderName || reader.name}?
+            <h3 className="text-base font-bold text-gray-900">End Consultation?</h3>
+            <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+              Are you sure you want to conclude your live reading with {astrologerName}?
             </p>
             
             <div className="flex items-center gap-2 mt-5">
               <button
+                type="button"
                 onClick={() => setShowEndConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                className="flex-1 py-2.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition cursor-pointer"
               >
                 Continue Chat
               </button>
               <button
+                type="button"
                 onClick={handleEndConsultation}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-lg shadow-rose-600/20"
+                className="flex-1 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-rose-600/20"
               >
                 Yes, End Now
               </button>
@@ -661,16 +691,16 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       {/* COMPLETED REVIEW / FEEDBACK MODAL */}
       {/* =================================================================== */}
       {isCompleted && !reviewSubmitted && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0E1325] border border-amber-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-purple-200 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center">
             
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 mx-auto flex items-center justify-center mb-3">
-              <Award className="w-6 h-6 text-amber-400" />
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 mx-auto flex items-center justify-center mb-3">
+              <Award className="w-6 h-6 text-amber-500" />
             </div>
 
-            <h3 className="text-base font-bold text-white">How was your reading?</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Your feedback helps {session.requestedReaderName || reader.name} and the LUMSIC collective.
+            <h3 className="text-base font-bold text-gray-900">How was your reading?</h3>
+            <p className="text-xs text-gray-600 mt-1">
+              Your feedback helps {astrologerName} and the LUMSIC collective.
             </p>
 
             {/* Stars */}
@@ -682,7 +712,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
                   onClick={() => setRating(s)}
                   className="p-1 transition hover:scale-125 cursor-pointer"
                 >
-                  <Star className={`w-7 h-7 ${s <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}`} />
+                  <Star className={`w-7 h-7 ${s <= rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
                 </button>
               ))}
             </div>
@@ -700,10 +730,10 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
                   key={tag}
                   type="button"
                   onClick={() => setSelectedTag(tag)}
-                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
                     selectedTag === tag
-                      ? 'bg-amber-500 text-slate-950 font-bold'
-                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-[#6D28D9] text-white font-bold'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {tag}
@@ -713,14 +743,16 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
 
             <div className="flex items-center gap-2 mt-5">
               <button
+                type="button"
                 onClick={() => setReviewSubmitted(true)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+                className="flex-1 py-2.5 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 text-xs font-semibold cursor-pointer"
               >
                 Skip
               </button>
               <button
+                type="button"
                 onClick={handleRatingSubmit}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                className="flex-1 py-2.5 rounded-full bg-[#6D28D9] hover:bg-purple-800 text-white font-bold text-xs shadow-md shadow-purple-600/20 cursor-pointer"
               >
                 Submit Review
               </button>

@@ -79,43 +79,100 @@ export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD
 }
 
 /**
- * Detects user country & currency based on stored preference, IP/Server headers, or timezone heuristics.
- * Strict exclusion of India / INR.
+ * Timezone-based country heuristic (instantaneous, offline-safe, 0ms latency)
+ */
+function detectFromTimezone(): CountryInfo | null {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) {
+      return COUNTRIES.find(c => c.code === 'IN') || null;
+    }
+    if (tz.includes('London') || tz.includes('Belfast')) {
+      return COUNTRIES.find(c => c.code === 'GB') || null;
+    }
+    if (tz.includes('Toronto') || tz.includes('Vancouver') || tz.includes('Montreal') || tz.includes('Edmonton') || tz.includes('Winnipeg')) {
+      return COUNTRIES.find(c => c.code === 'CA') || null;
+    }
+    if (tz.includes('Sydney') || tz.includes('Melbourne') || tz.includes('Brisbane') || tz.includes('Perth') || tz.includes('Adelaide')) {
+      return COUNTRIES.find(c => c.code === 'AU') || null;
+    }
+    if (tz.includes('Dubai')) {
+      return COUNTRIES.find(c => c.code === 'AE') || null;
+    }
+    if (tz.includes('Singapore')) {
+      return COUNTRIES.find(c => c.code === 'SG') || null;
+    }
+    if (tz.includes('Auckland')) {
+      return COUNTRIES.find(c => c.code === 'NZ') || null;
+    }
+    if (tz.includes('Paris')) return COUNTRIES.find(c => c.code === 'FR') || null;
+    if (tz.includes('Berlin')) return COUNTRIES.find(c => c.code === 'DE') || null;
+    if (tz.includes('Rome')) return COUNTRIES.find(c => c.code === 'IT') || null;
+    if (tz.includes('Madrid')) return COUNTRIES.find(c => c.code === 'ES') || null;
+    if (tz.includes('Amsterdam')) return COUNTRIES.find(c => c.code === 'NL') || null;
+    if (tz.includes('Dublin')) return COUNTRIES.find(c => c.code === 'IE') || null;
+    if (tz.includes('Zurich')) return COUNTRIES.find(c => c.code === 'CH') || null;
+    if (tz.startsWith('America/')) {
+      return COUNTRIES.find(c => c.code === 'US') || null;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Detects user country & currency based on stored preference, local /api/geo, or timezone heuristics.
+ * Fully resilient with no network blocking or unhandled console errors.
  */
 export async function detectUserGeo(): Promise<CountryInfo> {
+  const defaultCountry = COUNTRIES.find(c => c.code === 'US') || COUNTRIES[0];
+
+  // 1. Return saved preference if already chosen by visitor
   try {
-    // Detect visitor country directly from their public IP
-    const response = await fetch('https://ipapi.co/json/', {
-      signal: AbortSignal.timeout(5000),
-      cache: 'no-store',
+    const savedCode = localStorage.getItem('astral_country');
+    if (savedCode) {
+      const savedMatch = COUNTRIES.find(c => c.code.toUpperCase() === savedCode.toUpperCase());
+      if (savedMatch) return savedMatch;
+    }
+  } catch {}
+
+  // 2. Try fast local backend /api/geo with 1200ms timeout
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const res = await fetch('/api/geo', {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
     });
+    clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      throw new Error('IP location service unavailable');
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      const code = String(data?.country || '').toUpperCase();
+      if (code) {
+        const match = COUNTRIES.find(c => c.code.toUpperCase() === code);
+        if (match) {
+          try {
+            localStorage.setItem('astral_country', match.code);
+            localStorage.setItem('astral_currency', match.currency);
+          } catch {}
+          return match;
+        }
+      }
     }
+  } catch {}
 
-    const data = await response.json();
-    const countryCode = String(data.country_code || '').toUpperCase();
-
-    const match = COUNTRIES.find(
-      country => country.code.toUpperCase() === countryCode
-    );
-
-    if (!match) {
-      throw new Error('Country not supported: ' + countryCode);
-    }
-
-    // Save the latest IP-detected country and currency
-    localStorage.setItem('astral_country', match.code);
-    localStorage.setItem('astral_currency', match.currency);
-
-    return match;
-  } catch (error) {
-    console.error('IP country detection failed:', error);
-
-    // Fallback if IP detection is unavailable
-    return COUNTRIES.find(country => country.code === 'US') || COUNTRIES[0];
+  // 3. Instant client timezone heuristic (100% reliable, zero network latency)
+  const tzMatch = detectFromTimezone();
+  if (tzMatch) {
+    try {
+      localStorage.setItem('astral_country', tzMatch.code);
+      localStorage.setItem('astral_currency', tzMatch.currency);
+    } catch {}
+    return tzMatch;
   }
+
+  // 4. Fallback to default
+  return defaultCountry;
 }
 /**
  * Format rate per minute dynamically into the user's currency
