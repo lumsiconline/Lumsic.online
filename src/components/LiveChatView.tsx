@@ -58,6 +58,19 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const [showBirthDetails, setShowBirthDetails] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   
+  // Real-time Astrologer Typing State
+  const [isAstrologerTyping, setIsAstrologerTyping] = useState<boolean>(false);
+  const typingTimerRef = useRef<any>(null);
+
+  // Mobile Viewport Keyboard & Screen Fitting State (WhatsApp-style)
+  const [viewportHeight, setViewportHeight] = useState<number>(() => {
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      return window.visualViewport.height;
+    }
+    return typeof window !== 'undefined' ? window.innerHeight : 0;
+  });
+  const [viewportTop, setViewportTop] = useState<number>(0);
+
   // If previously completed, allow user to resume or keep active
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   
@@ -69,11 +82,91 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const lastMessageCountRef = useRef(messages.length);
 
+  // =========================================================================
+  // MOBILE SCREEN FIT (WHATSAPP-STYLE): Lock body & Track Visual Viewport
+  // =========================================================================
+  useEffect(() => {
+    // Prevent document scrolling so keyboard ONLY resizes chat messages
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalHtmlHeight = document.documentElement.style.height;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyHeight = document.body.style.height;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyTop = document.body.style.top;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.height = '100%';
+    document.body.style.overflow = 'hidden';
+    document.body.style.height = '100%';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
+
+    const handleViewport = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+        setViewportTop(window.visualViewport.offsetTop || 0);
+        // Guarantee page window stays anchored at (0, 0)
+        if (window.scrollY !== 0 || window.scrollX !== 0) {
+          window.scrollTo(0, 0);
+        }
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewport);
+      window.visualViewport.addEventListener('scroll', handleViewport);
+      handleViewport();
+    }
+
+    const preventWindowScroll = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    window.addEventListener('scroll', preventWindowScroll);
+
+    return () => {
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.documentElement.style.height = originalHtmlHeight;
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.height = originalBodyHeight;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.top = originalBodyTop;
+      document.body.style.left = '';
+
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewport);
+        window.visualViewport.removeEventListener('scroll', handleViewport);
+      }
+      window.removeEventListener('scroll', preventWindowScroll);
+    };
+  }, []);
+
   // Live timer tick
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Update Astrologer Typing status from session state (with 4.5s debounce timeout)
+  useEffect(() => {
+    if (session?.isAstrologerTyping) {
+      const elapsed = Date.now() - (session.astrologerTypingAt || Date.now());
+      if (elapsed < 4500) {
+        setIsAstrologerTyping(true);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          setIsAstrologerTyping(false);
+        }, Math.max(1000, 4500 - elapsed));
+      } else {
+        setIsAstrologerTyping(false);
+      }
+    } else {
+      setIsAstrologerTyping(false);
+    }
+  }, [session?.isAstrologerTyping, session?.astrologerTypingAt]);
 
   // Find first message from astrologer/reader
   const firstAstrologerMessage = useMemo(() => {
@@ -143,10 +236,26 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           if (type === 'message_received' && payload) {
             const msg: ChatMessage = payload;
             if (msg.sessionId === session.id) {
+              // Astrologer message arrived -> stop typing indicator immediately
+              if (msg.sender === 'astrologer') {
+                setIsAstrologerTyping(false);
+              }
               setMessages(prev => {
                 if (prev.some(m => m.id === msg.id)) return prev;
                 return [...prev, msg];
               });
+            }
+          } else if (type === 'typing' && payload && payload.sessionId === session.id) {
+            if (payload.sender === 'astrologer') {
+              if (payload.isTyping) {
+                setIsAstrologerTyping(true);
+                if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+                typingTimerRef.current = setTimeout(() => {
+                  setIsAstrologerTyping(false);
+                }, 4000);
+              } else {
+                setIsAstrologerTyping(false);
+              }
             }
           }
         };
@@ -180,10 +289,21 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     };
   }, [session.id]);
 
-  // Auto scroll to bottom
+  // Auto scroll to bottom when new messages arrive or astrologer starts typing
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isAstrologerTyping]);
+
+  // Handle mobile keyboard focus (WhatsApp-style screen fit)
+  const handleInputFocus = () => {
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+    setTimeout(() => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 120);
+  };
 
   // =========================================================================
   // MESSAGE SENDING: Instantaneous Local + Firestore + Backend Dispatch
@@ -282,12 +402,19 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const astrologerName = session.requestedReaderName || session.assignedReaderName || reader.name;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col w-full h-[100dvh] bg-white text-gray-900 font-sans overflow-hidden">
+    <div 
+      style={{
+        height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+        maxHeight: viewportHeight ? `${viewportHeight}px` : '100dvh',
+        top: `${viewportTop}px`
+      }}
+      className="fixed left-0 right-0 z-50 flex flex-col w-full bg-white text-gray-900 font-sans overflow-hidden overscroll-none"
+    >
       
       {/* =================================================================== */}
       {/* 1. TOP HEADER: PROPERLY ASSIGNED PURPLE HEADER (FIT TO SCREEN) */}
       {/* =================================================================== */}
-      <header className="bg-gradient-to-r from-[#4C1D95] via-[#5B21B6] to-[#6D28D9] text-white px-3 sm:px-5 py-2.5 shrink-0 flex items-center justify-between gap-2 shadow-md z-20">
+      <header className="bg-gradient-to-r from-[#4C1D95] via-[#5B21B6] to-[#6D28D9] text-white px-3 sm:px-5 py-2.5 shrink-0 sticky top-0 flex items-center justify-between gap-2 shadow-md z-30">
         
         {/* Left: Back Button, Avatar, Full Astrologer Name & Status */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -443,7 +570,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       {/* =================================================================== */}
       {/* 3. CHAT MESSAGES STREAM (WHITE BACKGROUND, CLEAN PURPLE ACCENTS) */}
       {/* =================================================================== */}
-      <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 bg-[#F8F9FD]">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 bg-[#F8F9FD]">
         
         {/* Sanctuary Welcome Card */}
         <div className="p-4 rounded-2xl bg-white border border-purple-100 text-center max-w-md mx-auto shadow-xs">
@@ -555,6 +682,31 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           );
         })}
 
+        {/* Astrologer Real-Time Typing Indicator (WhatsApp Style) */}
+        {isAstrologerTyping && (
+          <div className="flex gap-2 items-end justify-start animate-in fade-in slide-in-from-bottom-1 duration-150">
+            {/* Mini avatar */}
+            <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 ring-1 ring-purple-300 mb-1">
+              <img 
+                src={reader.avatar} 
+                alt={astrologerName} 
+                className="w-full h-full object-cover" 
+              />
+            </div>
+
+            {/* Bubble with typing animation */}
+            <div className="bg-white text-gray-800 border border-purple-200/90 rounded-2xl rounded-tl-xs px-3.5 py-2 text-xs shadow-xs flex items-center gap-2">
+              <span className="font-semibold text-purple-900">{astrologerName}</span>
+              <span className="text-gray-500">is typing</span>
+              <div className="flex items-center gap-1 ml-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-bounce"></span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -581,7 +733,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       {/* 5. WHITE COMPOSER BAR & PURPLE ACTION BUTTON */}
       {/* =================================================================== */}
       {!isCompleted ? (
-        <div className="p-3 bg-white border-t border-purple-100 shrink-0">
+        <div className="p-3 bg-white border-t border-purple-100 shrink-0 sticky bottom-0 z-30 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           
           {/* Quick Symbol bar */}
           <div className="flex items-center gap-1 mb-2 px-1">
@@ -610,6 +762,9 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
               placeholder={`Type your message for ${astrologerName}...`}
               value={inputText}
               onChange={e => setInputText(e.target.value)}
+              onFocus={handleInputFocus}
+              enterKeyHint="send"
+              autoComplete="off"
               className="flex-1 bg-gray-50 border border-purple-200 text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-400 rounded-full px-4 py-2.5 text-sm transition"
               autoFocus
             />

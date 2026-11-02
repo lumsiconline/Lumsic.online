@@ -168,6 +168,8 @@ export interface ConsultationSession {
   lastMessageAt?: string;
   unreadForOperator?: boolean;
   unreadForCustomer?: boolean;
+  isAstrologerTyping?: boolean;
+  astrologerTypingAt?: number;
   messages: ChatMessage[];
   paymentStatus?: 'free_tier' | 'paid_active' | 'pending_topup' | 'settled' | string;
 }

@@ -74,7 +74,8 @@ export type SessionEventType =
   | 'session_updated' 
   | 'session_accepted' 
   | 'session_declined' 
-  | 'session_ended';
+  | 'session_ended'
+  | 'typing';
 
 // Broadcast an event to other tabs/windows
 export function broadcastSessionEvent(type: SessionEventType, data: any) {

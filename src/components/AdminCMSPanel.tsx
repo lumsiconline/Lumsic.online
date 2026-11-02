@@ -103,6 +103,51 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
   const [replyText, setReplyText] = useState<string>('');
   const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const astrologerTypingTimeoutRef = useRef<any>(null);
+
+  // Handle typing indicator dispatch to user chat
+  const handleAdminTypingChange = (text: string) => {
+    setReplyText(text);
+    if (!selectedSession) return;
+
+    const readerName = selectedSession.assignedReaderName || selectedSession.requestedReaderName || 'Astrologer';
+
+    // 1. Broadcast immediate typing event to seeker tabs
+    broadcastSessionEvent('typing', {
+      sessionId: selectedSession.id,
+      sender: 'astrologer',
+      isTyping: Boolean(text.trim()),
+      readerName
+    });
+
+    // 2. Debounced write to Firestore for cross-device synchronization
+    if (!astrologerTypingTimeoutRef.current) {
+      try {
+        setDoc(doc(db, 'sessions', selectedSession.id), {
+          isAstrologerTyping: true,
+          astrologerTypingAt: Date.now()
+        }, { merge: true }).catch(() => {});
+      } catch {}
+    } else {
+      clearTimeout(astrologerTypingTimeoutRef.current);
+    }
+
+    // 3. Auto-clear typing after 3.5 seconds of inactivity
+    astrologerTypingTimeoutRef.current = setTimeout(() => {
+      broadcastSessionEvent('typing', {
+        sessionId: selectedSession.id,
+        sender: 'astrologer',
+        isTyping: false
+      });
+      try {
+        setDoc(doc(db, 'sessions', selectedSession.id), {
+          isAstrologerTyping: false,
+          astrologerTypingAt: 0
+        }, { merge: true }).catch(() => {});
+      } catch {}
+      astrologerTypingTimeoutRef.current = null;
+    }, 3500);
+  };
 
   // Reassign Modal State
   const [reassignModalOpen, setReassignModalOpen] = useState<boolean>(false);
@@ -589,6 +634,17 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     setReplyText('');
     setIsSendingReply(true);
 
+    // Immediately cancel and reset typing indicators
+    if (astrologerTypingTimeoutRef.current) {
+      clearTimeout(astrologerTypingTimeoutRef.current);
+      astrologerTypingTimeoutRef.current = null;
+    }
+    broadcastSessionEvent('typing', {
+      sessionId: selectedSession.id,
+      sender: 'astrologer',
+      isTyping: false
+    });
+
     const senderName = selectedSession.assignedReaderName || selectedSession.requestedReaderName || 'LUMSIC Guide';
     const newMsg: ChatMessage = {
       id: 'msg_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -602,6 +658,8 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     const updatedSession: ConsultationSession = {
       ...selectedSession,
       status: 'active',
+      isAstrologerTyping: false,
+      astrologerTypingAt: 0,
       messages: [...(selectedSession.messages || []), newMsg],
       lastMessageText: text,
       lastMessageAt: newMsg.timestamp,
@@ -1493,7 +1551,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                       rows={1}
                       placeholder={`Reply as ${selectedSession.assignedReaderName || selectedSession.requestedReaderName || 'Astrologer'}...`}
                       value={replyText}
-                      onChange={e => setReplyText(e.target.value)}
+                      onChange={e => handleAdminTypingChange(e.target.value)}
                       onKeyDown={e => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
