@@ -5531,6 +5531,190 @@ app.post('/api/sessions/:id/message', async (req: Request, res: Response) => {
   res.json({ success: true, message, aiReply: aiReplyMsg, session });
 });
 
+// =========================================================================
+// BRAND-NEW USER-TO-ASTROLOGER CHAT CONNECTIVITY ENGINE
+// =========================================================================
+
+// 1. Connect User to Astrologer (creates live consultation & broadcasts to admin)
+app.post('/api/chat/connect', async (req: Request, res: Response) => {
+  const { 
+    customerId, 
+    customerName, 
+    readingType, 
+    topic, 
+    initialQuestion, 
+    birthDetails,
+    requestedReaderId,
+    existingSessionId 
+  } = req.body || {};
+
+  const effectiveReaderId = requestedReaderId || 'psychic-tamara';
+  const reader = db.readers.find(r => r.id === effectiveReaderId || r.astroId === effectiveReaderId) || db.readers[0];
+  const effectiveCustomerId = customerId || ('cust_' + Date.now());
+  const effectiveName = customerName || birthDetails?.name || 'Valued Seeker';
+
+  // Ensure customer profile
+  if (!db.customers[effectiveCustomerId]) {
+    db.customers[effectiveCustomerId] = {
+      id: effectiveCustomerId,
+      name: effectiveName,
+      birthDetails,
+      isFirstTimeUser: true,
+      freeMinutesUsed: false,
+      totalConsultations: 1
+    };
+  }
+
+  const sessionId = existingSessionId || ('sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6));
+
+  const initialMessages: ChatMessage[] = [];
+  
+  // Format seeker intake card
+  if (birthDetails) {
+    const intakeSummary = `Hi,\nBelow are my details:\nName: ${effectiveName}\nGender: ${birthDetails.gender || 'Not specified'}\nDOB: ${birthDetails.dob || 'Not specified'}\nTOB: ${birthDetails.birthTime || 'Not specified'}\nPOB: ${birthDetails.placeOfBirth || 'Not specified'}`;
+    initialMessages.push({
+      id: 'msg_details_' + Date.now(),
+      sessionId,
+      sender: 'customer',
+      senderName: effectiveName,
+      text: intakeSummary,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  if (initialQuestion && initialQuestion.trim()) {
+    initialMessages.push({
+      id: 'msg_q_' + Date.now(),
+      sessionId,
+      sender: 'customer',
+      senderName: effectiveName,
+      text: initialQuestion.trim(),
+      timestamp: new Date(Date.now() + 50).toISOString()
+    });
+  }
+
+  const newSession: ConsultationSession = {
+    id: sessionId,
+    customerId: effectiveCustomerId,
+    customerName: effectiveName,
+    requestedReaderId: reader.id,
+    requestedReaderName: reader.name,
+    requestedAstroId: reader.astroId,
+    assignedReaderId: reader.id,
+    assignedReaderName: reader.name,
+    assignedAstroId: reader.astroId,
+    readingType: readingType || reader.category || 'Live Consultation',
+    topic: topic || 'Spiritual & Life Guidance',
+    initialQuestion: initialQuestion || `Connecting with ${reader.name}`,
+    birthDetails,
+    status: 'waiting',
+    createdAt: new Date().toISOString(),
+    isFreeConsultation: true,
+    freeMinutesTotal: 5,
+    freeSecondsRemaining: 300,
+    totalDurationSeconds: 0,
+    paidSeconds: 0,
+    ratePerMinute: reader.ratePerMinute || 1.75,
+    unreadForOperator: true,
+    messages: initialMessages,
+    lastMessageText: initialMessages[initialMessages.length - 1]?.text || 'Consultation started',
+    lastMessageAt: new Date().toISOString()
+  };
+
+  db.sessions[sessionId] = newSession;
+  updateStats();
+  saveDB();
+
+  // Direct Firestore Sync (Instant sub-100ms delivery to Admin Dashboard across all domains)
+  if (firestoreDb) {
+    fsSetDoc(fsDoc(firestoreDb, 'sessions', sessionId), newSession).catch(() => {});
+  }
+
+  broadcast('new_session', newSession);
+  res.json({ success: true, session: newSession });
+});
+
+// 2. Dispatch User/Astrologer Chat Message
+app.post('/api/chat/message', async (req: Request, res: Response) => {
+  const { sessionId, sender = 'customer', senderName, text } = req.body || {};
+  if (!sessionId || !text || !text.trim()) {
+    return res.status(400).json({ error: 'sessionId and text are required' });
+  }
+
+  const session = db.sessions[sessionId];
+  if (!session) {
+    return res.status(404).json({ error: 'Consultation session not found' });
+  }
+
+  const cleanText = sanitizeInputString(text.trim());
+  const effectiveSenderName = senderName || (sender === 'astrologer' ? (session.assignedReaderName || session.requestedReaderName) : session.customerName);
+
+  const message: ChatMessage = {
+    id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    sessionId,
+    sender: sender === 'astrologer' ? 'astrologer' : 'customer',
+    senderName: effectiveSenderName,
+    text: cleanText,
+    timestamp: new Date().toISOString()
+  };
+
+  // If waiting and astrologer replies, transition to active
+  if (session.status === 'waiting' && sender === 'astrologer') {
+    session.status = 'active';
+    session.acceptedAt = new Date().toISOString();
+  }
+
+  if (sender === 'customer') {
+    session.unreadForOperator = true;
+  }
+
+  session.messages.push(message);
+  session.lastMessageText = cleanText;
+  session.lastMessageAt = message.timestamp;
+
+  saveDB();
+
+  if (firestoreDb) {
+    fsSetDoc(fsDoc(firestoreDb, 'sessions', sessionId), session, { merge: true }).catch(() => {});
+  }
+
+  broadcast('message_received', { sessionId, message, session });
+  res.json({ success: true, message, session });
+});
+
+// 3. Conclude Consultation
+app.post('/api/chat/end', (req: Request, res: Response) => {
+  const { sessionId } = req.body || {};
+  const targetId = sessionId || req.query.sessionId;
+  const session = db.sessions[targetId as string];
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  session.status = 'completed';
+  session.endedAt = new Date().toISOString();
+
+  const endNotice: ChatMessage = {
+    id: 'sys_end_' + Date.now(),
+    sessionId: session.id,
+    sender: 'system',
+    senderName: 'LUMSIC Sanctuary',
+    text: 'Consultation concluded. Thank you for connecting with LUMSIC.',
+    timestamp: new Date().toISOString(),
+    isSystemNotice: true
+  };
+
+  session.messages.push(endNotice);
+  updateStats();
+  saveDB();
+
+  if (firestoreDb) {
+    fsSetDoc(fsDoc(firestoreDb, 'sessions', session.id), session, { merge: true }).catch(() => {});
+  }
+
+  broadcast('session_completed', { session, notice: endNotice });
+  broadcast('session_ended', session);
+  res.json({ success: true, session });
+});
+
 // API: Top up or continue paid session after free minutes
 app.post('/api/sessions/:id/topup', (req: Request, res: Response) => {
   const session = db.sessions[req.params.id];

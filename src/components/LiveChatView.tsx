@@ -1,20 +1,39 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConsultationSession, ChatMessage, Reader } from '../types';
 import { 
   getStoredSessions, 
+  saveStoredSession, 
+  appendMessageToStoredSession, 
+  broadcastSessionEvent, 
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
+import { db } from '../lib/firebase';
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { 
   Send, 
   X, 
   ArrowLeft, 
   Star, 
-  Check, 
-  CheckCheck, 
   Sparkles, 
-  CreditCard,
-  Flame,
-  Gift
+  Clock, 
+  Shield, 
+  CheckCheck, 
+  Check, 
+  Compass, 
+  User, 
+  Calendar, 
+  MapPin, 
+  Info, 
+  Heart, 
+  Volume2, 
+  VolumeX, 
+  AlertCircle,
+  ThumbsUp,
+  Award,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Smile
 } from 'lucide-react';
 
 interface LiveChatViewProps {
@@ -23,665 +42,694 @@ interface LiveChatViewProps {
   onSendMessage: (text: string) => Promise<ChatMessage | undefined | null | void> | void;
   onCloseChat: () => void;
   onEndConsultation: () => void;
-  onTopUp: (minutes: number) => void;
+  onTopUp?: (minutes: number) => void;
 }
 
-const RECHARGE_PACKS = [
-  { mins: 5, price: 5, label: 'Quick Question', badge: '' },
-  { mins: 15, price: 15, label: 'Deep Reading', badge: 'POPULAR' },
-  { mins: 30, price: 30, label: 'Life & Destiny', badge: '100% CASHBACK' },
-  { mins: 60, price: 50, label: 'Master Session', badge: 'BEST VALUE' }
+const QUICK_INQUIRIES = [
+  '✨ Will I find my true soulmate or life partner this year?',
+  '💼 What career shifts and opportunities are indicated for me?',
+  '🌟 What spiritual remedies can remove obstacles right now?',
+  '🪐 How are my current planetary transits affecting my mind and finances?'
 ];
 
+const CELESTIAL_SYMBOLS = ['✨', '🌟', '🔮', '🌙', '🪐', '☀️', '💖', '🕊️'];
+
 export const LiveChatView: React.FC<LiveChatViewProps> = ({
-  session,
+  session: initialSession,
   reader,
   onSendMessage,
   onCloseChat,
-  onEndConsultation,
-  onTopUp
+  onEndConsultation
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(session.messages);
+  const [session, setSession] = useState<ConsultationSession>(initialSession);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialSession.messages || []);
   const [inputText, setInputText] = useState('');
-  
-  // Timer in seconds: freeSecondsRemaining for introductory free chat
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
-    return session.freeSecondsRemaining > 0 ? session.freeSecondsRemaining : 300;
-  });
-  // Consultation time begins only after the human astrologer sends their first reply.
-  const [humanReplyStarted, setHumanReplyStarted] = useState<boolean>(() =>
-    (session.messages || []).some(message => message.sender === 'astrologer' && !message.isAiMessage)
-  );
-  
-  const [isEnded, setIsEnded] = useState<boolean>(session.status === 'completed');
-  const [isTyping, setIsTyping] = useState<boolean>(false);
-  const [showCashbackPopup, setShowCashbackPopup] = useState<boolean>(false);
-  const [showRechargePacks, setShowRechargePacks] = useState<boolean>(false);
-  const [userRating, setUserRating] = useState<number>(0);
-  const [hasRated, setHasRated] = useState<boolean>(false);
+  const [isSending, setIsSending] = useState(false);
+  const [showBirthDetails, setShowBirthDetails] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(initialSession.status === 'completed');
+  const [rating, setRating] = useState<number>(5);
+  const [selectedTag, setSelectedTag] = useState<string>('Accurate & Insightful');
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const responseIndexRef = useRef<number>(0);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastMessageCountRef = useRef(messages.length);
 
-  // Sync incoming props messages
+  // Live timer tick
   useEffect(() => {
-    if (session.messages && session.messages.length > messages.length) {
-      setMessages(session.messages);
-    }
-    if ((session.messages || []).some(message => message.sender === 'astrologer' && !message.isAiMessage)) {
-      setHumanReplyStarted(true);
-    }
-  }, [session.messages]);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Add one local confirmation only; it is not an astrologer/AI reply.
+  // Format elapsed consultation duration
+  const elapsedDuration = useMemo(() => {
+    const start = session.acceptedAt || session.createdAt || session.startTime;
+    if (!start) return '00:00';
+    const totalSecs = Math.max(0, Math.floor((now - new Date(start).getTime()) / 1000));
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [now, session.acceptedAt, session.createdAt, session.startTime]);
+
+  const playChime = () => {
+    if (!soundEnabled) return;
+    try {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      }
+    } catch {}
+  };
+
+  // =========================================================================
+  // REAL-TIME FIRESTORE & SERVER CONNECTIVITY
+  // =========================================================================
   useEffect(() => {
-    setMessages(prev => prev.some(message => message.id === `welcome_${session.id}`) ? prev : [{
-      id: `welcome_${session.id}`,
-      sessionId: session.id,
-      sender: 'system',
-      senderName: 'Lumsic',
-      text: `Thank you for connecting with Lumsic. ${session.requestedReaderName || reader.name} will join you shortly.`,
-      timestamp: new Date().toISOString(),
-      isSystemNotice: true
-    }, ...prev]);
-  }, [session.id]);
+    if (!session?.id) return;
 
-  // Real-time synchronization: BroadcastChannel + local storage + server poll
-  useEffect(() => {
-    if (!session?.id || isEnded) return;
-
-    // 1. Cross-tab instant 0ms broadcast listener
-    let bc: BroadcastChannel | null = null;
-    const handleIncomingEvent = (event: any) => {
-      try {
-        const { type, payload, data } = event.data || event.detail || {};
-        const msg = payload || data;
-        if (type === 'message_received' && msg) {
-          if (msg.sessionId === session.id) {
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            if (msg.sender === 'astrologer' && !msg.isAiMessage) {
-              setHumanReplyStarted(true);
+    // 1. Direct Firestore Real-time Listener (Receives replies from Astrologer/Admin instantaneously)
+    let unsubFirestore: (() => void) | null = null;
+    try {
+      unsubFirestore = onSnapshot(doc(db, 'sessions', session.id), (docSnap) => {
+        if (docSnap.exists()) {
+          const remote = docSnap.data() as ConsultationSession;
+          if (remote && remote.id === session.id) {
+            setSession(curr => ({ ...curr, ...remote }));
+            if (remote.messages && remote.messages.length > lastMessageCountRef.current) {
+              const latestMsg = remote.messages[remote.messages.length - 1];
+              if (latestMsg && latestMsg.sender === 'astrologer') {
+                playChime();
+              }
+              lastMessageCountRef.current = remote.messages.length;
+              setMessages(remote.messages);
+            }
+            if (remote.status === 'completed') {
+              setIsCompleted(true);
             }
           }
-        } else if (type === 'session_ended' && msg) {
-          if (msg.id === session.id) {
-            setIsEnded(true);
-            setShowCashbackPopup(true);
-          }
         }
-      } catch (err) {
-        console.warn('LiveChat Broadcast event notice:', err);
-      }
-    };
+      }, (err) => {
+        console.warn('Seeker Firestore live sync notice:', err);
+      });
+    } catch (err) {
+      console.warn('Firestore onSnapshot init notice:', err);
+    }
 
+    // 2. Server-Sent Events / BroadcastChannel Listener
+    let bc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel(SESSIONS_CHANNEL_NAME);
-        bc.onmessage = handleIncomingEvent;
+        bc.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === 'message_received' && payload) {
+            const msg: ChatMessage = payload;
+            if (msg.sessionId === session.id) {
+              setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                if (msg.sender === 'astrologer') playChime();
+                return [...prev, msg];
+              });
+            }
+          } else if (type === 'session_completed' && payload?.id === session.id) {
+            setIsCompleted(true);
+          }
+        };
       }
     } catch {}
 
-    const onCustomEvent = (e: Event) => handleIncomingEvent(e as CustomEvent);
-    window.addEventListener('lumsic_session_event', onCustomEvent);
-
-    // 2. High-resilience poll checking both local storage and server
+    // 3. Fallback periodic server poll (every 3 seconds)
     const pollInterval = setInterval(async () => {
-      // Local storage check (0ms cross-tab persistence)
       try {
-        const stored = getStoredSessions();
-        const currentStored = stored.find(s => s.id === session.id);
-        if (currentStored && Array.isArray(currentStored.messages)) {
-          setMessages(prev => {
-            if (currentStored.messages.length > prev.length) {
-              return currentStored.messages;
+        const token = sessionStorage.getItem(`lumsic_session_token_${session.id}`) || '';
+        const res = await fetch(`/api/sessions/${session.id}`, {
+          headers: token ? { 'x-session-token': token } : {}
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.session) {
+            setSession(curr => ({ ...curr, ...data.session }));
+            if (Array.isArray(data.session.messages) && data.session.messages.length > lastMessageCountRef.current) {
+              lastMessageCountRef.current = data.session.messages.length;
+              setMessages(data.session.messages);
             }
-            return prev;
-          });
-          if ((currentStored.messages || []).some(m => m.sender === 'astrologer' && !m.isAiMessage)) {
-            setHumanReplyStarted(true);
-          }
-          if (currentStored.status === 'completed' && !isEnded) {
-            setIsEnded(true);
-            setShowCashbackPopup(true);
+            if (data.session.status === 'completed') {
+              setIsCompleted(true);
+            }
           }
         }
       } catch {}
-
-      // Server poll
-      try {
-        const sessionToken = sessionStorage.getItem(`lumsic_session_token_${session.id}`);
-        const res = await fetch(`/api/sessions/${session.id}`, {
-          headers: sessionToken ? { 'x-session-token': sessionToken } : {}
-        });
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (data && data.session && Array.isArray(data.session.messages)) {
-            setMessages(prev => {
-              if (data.session.messages.length > prev.length) {
-                return data.session.messages;
-              }
-              return prev;
-            });
-            if ((data.session.messages || []).some((m: any) => m.sender === 'astrologer' && !m.isAiMessage)) {
-              setHumanReplyStarted(true);
-            }
-            if (data.session.status === 'completed' && !isEnded) {
-              setIsEnded(true);
-              setShowCashbackPopup(true);
-            }
-          }
-        }
-      } catch {
-        // network resilience
-      }
-    }, 2000);
+    }, 3000);
 
     return () => {
-      clearInterval(pollInterval);
+      if (unsubFirestore) unsubFirestore();
       if (bc) bc.close();
-      window.removeEventListener('lumsic_session_event', onCustomEvent);
+      clearInterval(pollInterval);
     };
-  }, [session?.id, isEnded]);
+  }, [session.id]);
 
-  // Live Timer Countdown: runs every second
-  useEffect(() => {
-    if (isEnded || !humanReplyStarted) return;
-
-    const timer = setInterval(() => {
-      setSecondsRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setIsEnded(true);
-          setShowCashbackPopup(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isEnded, humanReplyStarted]);
-
-  // Auto-scroll to latest message
+  // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  }, [messages]);
 
-  // Format timer into mm:ss mins
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} mins`;
-  };
+  // =========================================================================
+  // MESSAGE SENDING: Instantaneous Local + Firestore + Backend Dispatch
+  // =========================================================================
+  const handleSend = async (textToSend?: string) => {
+    const rawText = textToSend || inputText;
+    if (!rawText.trim() || isSending || isCompleted) return;
 
-  // Format message timestamp in 12-hour format e.g. "10:35 pm"
-  const formatMsgTime = (isoString?: string) => {
-    const d = isoString ? new Date(isoString) : new Date();
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
-  };
+    const cleanText = rawText.trim();
+    setInputText('');
+    setIsSending(true);
 
-  // Today's date pill label e.g. "06 Oct 2026"
-  const todayDateLabel = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  const handleSend = async () => {
-    if (!inputText.trim() || isEnded) return;
-
-    const userText = inputText.trim();
     const newMsg: ChatMessage = {
-      id: 'msg_user_' + Date.now(),
+      id: 'msg_c_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       sessionId: session.id,
       sender: 'customer',
-      senderName: session.customerName,
-      text: userText,
+      senderName: session.customerName || 'Seeker',
+      text: cleanText,
       timestamp: new Date().toISOString()
     };
 
+    // 1. Immediate optimistic UI render
     setMessages(prev => [...prev, newMsg]);
-    setInputText('');
-    setIsTyping(true);
+    lastMessageCountRef.current += 1;
+
+    // 2. Persist to local storage and broadcast to Admin tabs
+    appendMessageToStoredSession(session.id, newMsg);
+    broadcastSessionEvent('message_received', newMsg);
+
+    // 3. Direct Firestore live delivery (sub-100ms delivery to Astrologer & Admin)
+    try {
+      const sessionRef = doc(db, 'sessions', session.id);
+      await setDoc(sessionRef, {
+        messages: [...(session.messages || []), newMsg],
+        lastMessageText: cleanText,
+        lastMessageAt: newMsg.timestamp,
+        unreadForOperator: true
+      }, { merge: true });
+    } catch (fsErr) {
+      console.warn('Firestore message dispatch notice:', fsErr);
+    }
+
+    // 4. Dispatch to backend API
+    try {
+      await onSendMessage(cleanText);
+    } catch (err) {
+      console.warn('Backend message error:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Conclude Consultation
+  const handleEndConsultation = async () => {
+    setShowEndConfirm(false);
+    setIsCompleted(true);
+    const updated: ConsultationSession = {
+      ...session,
+      status: 'completed',
+      endedAt: new Date().toISOString()
+    };
+    setSession(updated);
+    saveStoredSession(updated);
+    broadcastSessionEvent('session_ended', updated);
 
     try {
-      const aiReply = await onSendMessage(userText);
-      if (aiReply) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === aiReply.id)) return prev;
-          return [...prev, aiReply];
-        });
-      }
-    } finally {
-      setIsTyping(false);
-    }
-  };
+      await setDoc(doc(db, 'sessions', session.id), { status: 'completed', endedAt: new Date().toISOString() }, { merge: true });
+    } catch {}
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+    try {
+      await fetch(`/api/sessions/${session.id}/complete`, { method: 'POST' });
+    } catch {}
 
-  const handleEndChat = () => {
-    setIsEnded(true);
-    setShowCashbackPopup(true);
     onEndConsultation();
   };
 
-  const handleRechargePackage = (minutes: number) => {
-    onTopUp(minutes);
-    setSecondsRemaining(prev => prev + minutes * 60);
-    setIsEnded(false);
-    setShowCashbackPopup(false);
-    setShowRechargePacks(false);
-
-    // Confirmation message in chat
-    const confirmMsg: ChatMessage = {
-      id: 'msg_sys_topup_' + Date.now(),
-      sessionId: session.id,
-      sender: 'astrologer',
-      senderName: reader.name,
-      text: `Thank you! ${minutes} minutes added to our reading. Let us dive deeper into the cosmic cards.`,
-      timestamp: new Date().toISOString()
-    };
-    setMessages(prev => [...prev, confirmMsg]);
+  const handleRatingSubmit = async () => {
+    setReviewSubmitted(true);
+    try {
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          readerId: reader.id,
+          readerName: reader.name,
+          customerName: session.customerName || 'Valued Seeker',
+          rating,
+          comment: selectedTag,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch {}
   };
 
+  const birthDetails = session.birthDetails;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-xl overflow-hidden font-sans animate-in fade-in duration-200">
       
-      {/* PHONE-STYLE CONTAINER MATCHING USER SCREENSHOTS */}
-      <div 
-        className="w-full h-full sm:max-w-md sm:h-[94vh] bg-[#ECE5DD] sm:rounded-[36px] shadow-2xl flex flex-col overflow-hidden relative border-0 sm:border-4 sm:border-gray-800"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="chat-screen-title"
-      >
+      {/* Hidden audio element for chime */}
+      <audio 
+        ref={audioRef} 
+        src="/assets/aistudio/mixkit-marimba-waiting-ringtone-1360_715cddd4.wav" 
+        preload="auto" 
+      />
+
+      {/* Main Luxury Consultation Container */}
+      <div className="w-full h-full sm:max-w-2xl sm:h-[94vh] bg-[#0A0D18] text-white sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden relative border border-amber-500/20 sm:ring-1 sm:ring-amber-500/30">
         
-        {/* ================= 1. HEADER ================= */}
-        <div className="bg-white/95 border-b border-gray-200/90 px-3.5 py-2.5 flex items-center justify-between shrink-0 shadow-xs z-20 backdrop-blur-md">
+        {/* =================================================================== */}
+        {/* 1. TOP HEADER: ASTROLOGER HERO & LIVE CONNECTION STATUS */}
+        {/* =================================================================== */}
+        <header className="bg-gradient-to-r from-[#11162B] via-[#0E1325] to-[#120F24] border-b border-amber-500/20 px-4 py-3 shrink-0 flex items-center justify-between gap-3 shadow-lg z-20">
           
-          <div className="flex items-center gap-2">
+          {/* Reader Profile Strip */}
+          <div className="flex items-center gap-3 min-w-0">
             <button
-              type="button"
               onClick={onCloseChat}
-              className="p-1 rounded-full hover:bg-gray-100 text-gray-700 transition-colors cursor-pointer"
-              aria-label="Back"
+              className="p-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700/60"
+              title="Close window (consultation remains active)"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
 
-            {/* Astrologer Avatar with online indicator */}
-            <div className="relative">
-              <div className="w-10 h-10 rounded-full overflow-hidden bg-purple-900 border border-purple-300 flex items-center justify-center font-bold text-white text-sm shadow-xs">
-                {reader.avatar ? (
-                  <img
-                    src={reader.avatar}
-                    alt={reader.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <span>{reader.initials}</span>
-                )}
+            <div className="relative shrink-0">
+              <div className="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-amber-400/60 shadow-md shadow-amber-500/10">
+                <img 
+                  src={reader.avatar} 
+                  alt={reader.name} 
+                  className="w-full h-full object-cover" 
+                />
               </div>
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-[#0A0D18]"></span>
+              </span>
             </div>
 
-            {/* Name + Live Running Timer / Chat Ended */}
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <h3 id="chat-screen-title" className="font-bold text-gray-900 text-sm leading-tight">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white tracking-wide truncate">
                   {session.requestedReaderName || reader.name}
-                </h3>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                </h2>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shrink-0">
+                  <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Verified</span>
+                </span>
               </div>
-
-              {/* Running countdown timer or ended state */}
-              <div className="text-[11px] font-medium leading-none mt-0.5">
-                {isTyping ? (
-                  <span className="text-purple-600 font-semibold animate-pulse">typing...</span>
-                ) : isEnded ? (
-                  <span className="text-gray-500">Chat ended</span>
-                ) : (
-                  <span className="text-gray-600 font-mono font-semibold">
-                    {formatTimer(secondsRemaining)}
-                  </span>
-                )}
+              
+              <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                <span className="truncate text-amber-200/80 text-[11px]">
+                  {reader.category || 'Spiritual Guide'}
+                </span>
+                <span className="text-slate-600">•</span>
+                <div className="flex items-center gap-1 text-[11px] text-amber-400">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>{reader.rating || 4.98}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right Header Action: End button */}
-          <div>
-            {!isEnded ? (
+          {/* Consultation Status & Top Tools */}
+          <div className="flex items-center gap-2 shrink-0">
+            
+            {/* Live Timer Pill */}
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900/90 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold shadow-xs">
+              <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+              <span>{elapsedDuration}</span>
+            </div>
+
+            {/* Sound Toggle */}
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-amber-300 transition cursor-pointer border border-slate-800"
+              title={soundEnabled ? 'Mute Chimes' : 'Unmute Chimes'}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-amber-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+            </button>
+
+            {/* Birth Details Toggle */}
+            {birthDetails && (
               <button
-                type="button"
-                onClick={handleEndChat}
-                className="px-3.5 py-1 rounded-md border border-gray-300 bg-white hover:bg-red-50 text-gray-700 hover:text-red-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-95"
+                onClick={() => setShowBirthDetails(!showBirthDetails)}
+                className={`p-2 rounded-xl transition cursor-pointer border ${
+                  showBirthDetails
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+                title="View your submitted Birth Details"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* End Consultation Button */}
+            {!isCompleted ? (
+              <button
+                onClick={() => setShowEndConfirm(true)}
+                className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-rose-200 text-xs font-bold transition cursor-pointer"
               >
                 End
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={onCloseChat}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <span className="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">
+                Concluded
+              </span>
             )}
+
           </div>
 
-        </div>
+        </header>
 
-        {/* ================= 2. STAR RATING STRIP (SCREENSHOT 4) ================= */}
-        {isEnded && (
-          <div className="bg-amber-50/90 border-b border-amber-200/80 px-4 py-2 flex items-center justify-between text-xs text-amber-900 z-10 animate-in fade-in">
-            <span className="font-medium">
-              {hasRated ? 'Thank you for your rating!' : 'Rate your reading:'}
-            </span>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => {
-                    setUserRating(star);
-                    setHasRated(true);
-                  }}
-                  className="p-0.5 text-amber-400 hover:text-amber-500 transition-transform hover:scale-125 cursor-pointer"
-                  title={`Rate ${star} stars`}
-                >
-                  <Star 
-                    className={`w-4 h-4 ${
-                      star <= userRating 
-                        ? 'fill-amber-400 text-amber-400' 
-                        : 'text-amber-300'
-                    }`} 
-                  />
-                </button>
-              ))}
+        {/* =================================================================== */}
+        {/* 2. OPTIONAL BIRTH DETAILS COLLAPSIBLE DRAWER */}
+        {/* =================================================================== */}
+        {showBirthDetails && birthDetails && (
+          <div className="bg-[#12162A] border-b border-amber-500/20 p-3.5 text-xs text-slate-300 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-amber-400" />
+                <span>Your Chart Intake Details</span>
+              </span>
+              <button 
+                onClick={() => setShowBirthDetails(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Name</span>
+                <strong className="text-white truncate block">{birthDetails.name || session.customerName}</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Date of Birth</span>
+                <strong className="text-white truncate block">{birthDetails.dob || 'Not specified'}</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Birth Time</span>
+                <strong className="text-white truncate block">{birthDetails.birthTime || 'Unknown'}</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-500 block">Place of Birth</span>
+                <strong className="text-white truncate block">{birthDetails.placeOfBirth || 'Not specified'}</strong>
+              </div>
             </div>
           </div>
         )}
 
-        {/* ================= 3. MESSAGES CONTAINER WITH WALLPAPER ================= */}
-        <div 
-          className="flex-1 overflow-y-auto px-3.5 py-4 space-y-3.5 relative"
-          style={{
-            backgroundImage: `radial-gradient(#00000008 1px, transparent 1px), radial-gradient(#00000008 1px, #ECE5DD 1px)`,
-            backgroundSize: '20px 20px',
-            backgroundPosition: '0 0, 10px 10px'
-          }}
-        >
-          {/* Centered Date Pill (Screenshot 1) */}
-          <div className="flex justify-center my-1">
-            <span className="px-3 py-1 rounded-md bg-white/80 border border-gray-200/60 text-gray-600 text-[11px] font-medium shadow-2xs">
-              {todayDateLabel}
-            </span>
+        {/* =================================================================== */}
+        {/* 3. CHAT MESSAGES STREAM */}
+        {/* =================================================================== */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-[#0A0D18] via-[#0D1020] to-[#0A0D18]">
+          
+          {/* Sanctuary Introduction Card */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/30 via-slate-900/70 to-indigo-950/30 border border-amber-500/20 text-center max-w-md mx-auto shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 mx-auto flex items-center justify-center mb-2">
+              <Sparkles className="w-5 h-5 text-amber-400" />
+            </div>
+            <h3 className="text-xs font-bold text-amber-200">
+              Personal Sanctuary with {session.requestedReaderName || reader.name}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+              Your consultation is active and protected. Ask freely about love, destiny, career, or remedies.
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-2 text-[10px] text-slate-500">
+              <Shield className="w-3 h-3 text-emerald-400" />
+              <span>Encrypted 1-on-1 Sanctuary</span>
+              <span>•</span>
+              <span className="text-emerald-400 font-medium">Reader Connected</span>
+            </div>
           </div>
 
-          {/* Messages Loop */}
-          {messages.map((msg) => {
-            // System Yellow Alert Banner (Screenshot 1)
-            if (msg.isBanner) {
+          {/* Render All Messages */}
+          {messages.map((msg, index) => {
+            const isCustomer = msg.sender === 'customer';
+            const isSystem = msg.sender === 'system' || msg.isSystemNotice;
+
+            if (isSystem) {
               return (
-                <div key={msg.id} className="flex justify-center my-2 animate-in fade-in duration-200">
-                  <div className="bg-[#FFF3CD] border border-[#FFEBAA] text-[#856404] px-4 py-2.5 rounded-xl text-center text-xs font-medium max-w-[90%] shadow-2xs leading-snug">
-                    {msg.text}
+                <div key={msg.id || index} className="flex justify-center my-2">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/80 border border-amber-500/20 text-[11px] text-amber-300/90 shadow-xs">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>{msg.text}</span>
                   </div>
                 </div>
               );
             }
 
-            const isCustomer = msg.sender === 'customer';
-
             return (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${isCustomer ? 'items-end' : 'items-start'} max-w-full`}
+              <div 
+                key={msg.id || index}
+                className={`flex gap-2.5 items-end ${isCustomer ? 'justify-end' : 'justify-start'}`}
               >
-                <div
-                  className={`relative px-3.5 py-2.5 rounded-2xl max-w-[85%] text-[13px] sm:text-sm leading-relaxed shadow-xs ${
-                    isCustomer
-                      ? 'bg-[#DCF8C6] text-gray-900 rounded-tr-xs' // WhatsApp light green
-                      : 'bg-white text-gray-900 rounded-tl-xs border border-gray-100' // WhatsApp clean white
-                  }`}
-                >
-                  {/* Text content with preserved newlines or dedicated User Details Card */}
-                  {msg.text.includes('Below are my details:') ? (
-                    <div className="bg-gradient-to-br from-[#1C1033] to-[#2B144E] text-white p-3 rounded-xl border border-purple-400/30 text-xs shadow-inner">
-                      <div className="flex items-center gap-1.5 pb-1.5 mb-1.5 border-b border-purple-400/20 font-bold text-amber-300">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Seeker Birth &amp; Consultation Details</span>
-                      </div>
-                      <div className="whitespace-pre-line text-[12px] leading-relaxed text-purple-100/90 font-mono">
-                        {msg.text}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="whitespace-pre-line break-words">
-                      {msg.text}
-                    </div>
-                  )}
+                {/* Astrologer mini avatar */}
+                {!isCustomer && (
+                  <img 
+                    src={reader.avatar} 
+                    alt={reader.name} 
+                    className="w-7 h-7 rounded-xl object-cover shrink-0 ring-1 ring-amber-400/40 mb-1" 
+                  />
+                )}
 
-                  {/* Dynamic Image Attachment (if any) */}
-                  {msg.imageUrl && (
-                    <div className="mt-2.5 rounded-xl overflow-hidden border border-purple-200/90 shadow-sm bg-purple-50/50">
-                      <img
-                        src={msg.imageUrl}
-                        alt="Reading Attachment"
-                        className="w-full max-h-56 object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                  )}
-
-                  {/* Message Time and Blue Checkmarks */}
-                  <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] text-gray-500 font-medium`}>
-                    <span>{formatMsgTime(msg.timestamp)}</span>
-                    {isCustomer && (
-                      <CheckCheck className="w-3.5 h-3.5 text-blue-500 stroke-[2.5]" />
-                    )}
+                <div className={`max-w-[82%] sm:max-w-[75%] flex flex-col ${isCustomer ? 'items-end' : 'items-start'}`}>
+                  
+                  {/* Sender Name & Time */}
+                  <div className="flex items-center gap-1.5 px-1 mb-1 text-[10px] text-slate-500">
+                    <span className="font-semibold text-slate-400">
+                      {isCustomer ? 'You' : (msg.senderName || reader.name)}
+                    </span>
+                    <span>•</span>
+                    <span>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
+
+                  {/* Message Bubble */}
+                  <div className={`px-4 py-2.5 rounded-2xl text-xs sm:text-[13px] leading-relaxed whitespace-pre-line shadow-md ${
+                    isCustomer
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-medium rounded-br-xs'
+                      : 'bg-[#151A30] border border-slate-700/70 text-slate-100 rounded-bl-xs'
+                  }`}>
+                    {msg.text}
+                  </div>
+
+                  {/* Delivery status for user messages */}
+                  {isCustomer && (
+                    <div className="flex items-center gap-1 mt-0.5 px-1 text-[10px] text-amber-400/80">
+                      <CheckCheck className="w-3 h-3" />
+                      <span>Delivered</span>
+                    </div>
+                  )}
+
                 </div>
               </div>
             );
           })}
 
-          {/* Natural Chat Typing Indicator */}
-          {isTyping && (
-            <div className="flex flex-col items-start max-w-full animate-in fade-in duration-150">
-              <div className="bg-white text-gray-500 px-3.5 py-2 rounded-2xl rounded-tl-xs border border-gray-100 shadow-xs flex items-center gap-1.5 text-xs">
-                <span className="text-[12px] text-gray-500 font-normal">typing</span>
-                <span className="flex items-center gap-1 ml-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                </span>
-              </div>
-            </div>
-          )}
-
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ================= 4. BOTTOM INPUT OR ENDED BANNER ================= */}
-        {!isEnded ? (
-          // Active Input Bar (Screenshot 1 & 2)
-          <div className="bg-white/95 border-t border-gray-200 px-3 py-2.5 flex items-center gap-2 shrink-0 shadow-lg z-20">
-            <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 border border-gray-200 flex items-center focus-within:border-purple-400 focus-within:bg-white transition-all">
+        {/* =================================================================== */}
+        {/* 4. QUICK INQUIRY CHIPS (Shown when chat is active) */}
+        {/* =================================================================== */}
+        {!isCompleted && messages.length <= 4 && (
+          <div className="px-3.5 py-2 bg-[#0E1222] border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto">
+            <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider shrink-0">Ask Guide:</span>
+            {QUICK_INQUIRIES.map((inquiry, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSend(inquiry)}
+                className="text-[11px] bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white px-3 py-1 rounded-xl border border-slate-700/60 shrink-0 transition cursor-pointer"
+              >
+                {inquiry}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* 5. INPUT COMPOSER BAR */}
+        {/* =================================================================== */}
+        {!isCompleted ? (
+          <div className="p-3 bg-[#0B0E1C] border-t border-amber-500/20 shrink-0">
+            
+            {/* Quick Symbol bar */}
+            <div className="flex items-center gap-1 mb-2 px-1">
+              <span className="text-[10px] text-slate-500 font-medium mr-1">Symbols:</span>
+              {CELESTIAL_SYMBOLS.map((sym, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setInputText(prev => prev + sym)}
+                  className="p-1 hover:bg-slate-800 rounded-lg text-xs transition cursor-pointer"
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="flex items-center gap-2"
+            >
               <input
                 type="text"
+                placeholder={`Ask ${session.requestedReaderName || reader.name} anything...`}
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
-                className="w-full bg-transparent text-gray-900 text-sm focus:outline-none placeholder:text-gray-400"
+                onChange={e => setInputText(e.target.value)}
+                className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition"
+                autoFocus
               />
-            </div>
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!inputText.trim()}
-              className="w-10 h-10 rounded-full bg-[#8DB8A3] hover:bg-[#8DB8A3]/90 text-[#3F7A63] flex items-center justify-center shadow-md active:scale-95 disabled:opacity-40 transition-all cursor-pointer shrink-0 border border-[#3F7A63]/30"
-              aria-label="Send"
-            >
-              <Send className="w-4 h-4 ml-0.5 text-[#3F7A63]" />
-            </button>
+              <button
+                type="submit"
+                disabled={!inputText.trim() || isSending}
+                className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer shrink-0"
+              >
+                <span>Send</span>
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+
+            <div className="text-center text-[10px] text-slate-500 mt-1.5">
+              Live sanctuary consultation • Responses are provided directly by verified astrologers
+            </div>
           </div>
         ) : (
-          // Persistent Special Offer Banner at bottom when chat has ended (Screenshot 4)
-          <div className="bg-white border-t border-gray-200 p-3.5 shrink-0 shadow-xl z-20 animate-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-3 mb-2.5">
-              <div className="w-11 h-11 rounded-full overflow-hidden bg-purple-900 border border-purple-300 shrink-0">
-                <img
-                  src={reader.avatar}
-                  alt={reader.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="text-xs text-gray-800 leading-snug">
-                <span className="font-bold text-gray-950">Hi {session.customerName || 'there'},</span>{' '}
-                Let's continue our chat. I've activated a <strong className="text-purple-700">Special Offer</strong> for you.
-              </div>
-            </div>
-
+          /* Concluded Banner */
+          <div className="p-4 bg-[#0E1222] border-t border-slate-800 text-center shrink-0">
+            <p className="text-xs text-slate-400">
+              This consultation has concluded. We hope the cosmic reading brought you clarity.
+            </p>
             <button
-              type="button"
-              onClick={() => setShowCashbackPopup(true)}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#6D28D9] to-[#8B5CF6] hover:brightness-110 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-purple-900/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+              onClick={onCloseChat}
+              className="mt-2.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md"
             >
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>Yes, Continue this chat</span>
+              Return to Sanctuary
             </button>
-          </div>
-        )}
-
-        {/* ================= 5. POPUP: 100% CASHBACK BANNER (SCREENSHOT 3) ================= */}
-        {showCashbackPopup && (
-          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="relative w-full max-w-xs bg-white rounded-3xl p-6 text-center shadow-2xl border border-purple-100 flex flex-col items-center animate-in zoom-in-95 duration-200">
-              
-              {/* Close Button X */}
-              <button
-                type="button"
-                onClick={() => setShowCashbackPopup(false)}
-                className="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center transition-colors cursor-pointer"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              {/* Colorful 100% CASHBACK Graphic Box (Screenshot 3) */}
-              <div className="relative my-2">
-                <div className="w-36 py-3 px-2 rounded-2xl bg-gradient-to-br from-[#FF9800] via-[#FF5722] to-[#E91E63] text-white font-black shadow-lg shadow-orange-500/30 transform -rotate-1">
-                  <div className="text-2xl font-black tracking-tight leading-none">
-                    100%
-                  </div>
-                  <div className="text-[11px] font-bold tracking-widest uppercase mt-0.5 bg-purple-900/40 rounded-md py-0.5">
-                    CASHBACK
-                  </div>
-                </div>
-              </div>
-
-              {/* Title & Subtitle from Screenshot 3 */}
-              <h4 className="text-base font-bold text-gray-950 mt-3 leading-snug">
-                Enjoyed your free session?
-              </h4>
-              <p className="text-xs text-gray-600 font-medium mt-1">
-                Get £50 extra on £50 recharge
-              </p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                Limited Time Offer · Valid for 30 mins.
-              </p>
-
-              {/* Recharge Now Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCashbackPopup(false);
-                  setShowRechargePacks(true);
-                }}
-                className="w-full mt-5 py-3 rounded-xl bg-gradient-to-r from-[#6D28D9] to-[#8B5CF6] hover:brightness-110 active:scale-95 text-white font-bold text-sm shadow-md shadow-purple-900/30 transition-all cursor-pointer"
-              >
-                Recharge Now
-              </button>
-
-            </div>
-          </div>
-        )}
-
-        {/* ================= 6. RECHARGE PACKAGES SELECTOR MODAL ================= */}
-        {showRechargePacks && (
-          <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-purple-100 flex flex-col text-gray-900 animate-in zoom-in-95">
-              
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
-                <div className="flex items-center gap-1.5">
-                  <Gift className="w-4 h-4 text-purple-600" />
-                  <h4 className="font-bold text-sm text-gray-900">
-                    Add Minutes &amp; Continue Chat
-                  </h4>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowRechargePacks(false)}
-                  className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="space-y-2.5">
-                {RECHARGE_PACKS.map((pack) => (
-                  <button
-                    key={pack.mins}
-                    type="button"
-                    onClick={() => handleRechargePackage(pack.mins)}
-                    className="w-full p-3 rounded-2xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50/50 flex items-center justify-between text-left transition-all cursor-pointer group active:scale-98"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900 text-sm">
-                          {pack.mins} Minutes
-                        </span>
-                        {pack.badge && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800">
-                            {pack.badge}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-gray-500">
-                        {pack.label} · £{(pack.price / pack.mins).toFixed(2)}/min
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-purple-700 font-extrabold text-sm group-hover:translate-x-0.5 transition-transform">
-                      <span>£{pack.price}</span>
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <p className="text-[10px] text-gray-400 text-center mt-3">
-                🔒 Safe &amp; Encrypted UK Checkout · 100% Satisfaction Guarantee
-              </p>
-
-            </div>
           </div>
         )}
 
       </div>
+
+      {/* =================================================================== */}
+      {/* CONFIRM END CONSULTATION MODAL */}
+      {/* =================================================================== */}
+      {showEndConfirm && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-[#0E1325] border border-amber-500/30 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 mx-auto flex items-center justify-center mb-3">
+              <AlertCircle className="w-6 h-6 text-rose-400" />
+            </div>
+            <h3 className="text-base font-bold text-white">End Consultation?</h3>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              Are you sure you want to conclude your live reading with {session.requestedReaderName || reader.name}?
+            </p>
+            
+            <div className="flex items-center gap-2 mt-5">
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Continue Chat
+              </button>
+              <button
+                onClick={handleEndConsultation}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-lg shadow-rose-600/20"
+              >
+                Yes, End Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* COMPLETED REVIEW / FEEDBACK MODAL */}
+      {/* =================================================================== */}
+      {isCompleted && !reviewSubmitted && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-[#0E1325] border border-amber-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center">
+            
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 mx-auto flex items-center justify-center mb-3">
+              <Award className="w-6 h-6 text-amber-400" />
+            </div>
+
+            <h3 className="text-base font-bold text-white">How was your reading?</h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Your feedback helps {session.requestedReaderName || reader.name} and the LUMSIC collective.
+            </p>
+
+            {/* Stars */}
+            <div className="flex items-center justify-center gap-2 my-4">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setRating(s)}
+                  className="p-1 transition hover:scale-125 cursor-pointer"
+                >
+                  <Star className={`w-7 h-7 ${s <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-600'}`} />
+                </button>
+              ))}
+            </div>
+
+            {/* Feedback Tags */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 my-3">
+              {[
+                'Accurate & Insightful',
+                'Deep Spiritual Clarity',
+                'Warm & Empathetic',
+                'Fast Responses',
+                'Life Changing'
+              ].map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setSelectedTag(tag)}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                    selectedTag === tag
+                      ? 'bg-amber-500 text-slate-950 font-bold'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 mt-5">
+              <button
+                onClick={() => setReviewSubmitted(true)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleRatingSubmit}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+              >
+                Submit Review
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
