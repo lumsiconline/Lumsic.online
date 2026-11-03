@@ -1248,6 +1248,75 @@ app.get('/api/admin/roles', requireAdmin, (_req: Request, res: Response) => {
   });
 });
 
+// =========================================================================
+// SITE BRANDING & LOGO IDENTITY SYSTEM
+// =========================================================================
+const DEFAULT_BRANDING_CONFIG = {
+  logoUrl: '',
+  brandName: 'LUMSIC',
+  tagline: 'Light • Mystic • Guidance',
+  logoShape: 'circle',
+  glowEffect: true,
+  updatedAt: new Date().toISOString(),
+  updatedBy: 'system'
+};
+
+// Public read endpoint for seekers and guests
+app.get('/api/site-settings/branding', (_req: Request, res: Response) => {
+  if (!(db as any).brandingConfig) {
+    (db as any).brandingConfig = { ...DEFAULT_BRANDING_CONFIG };
+  }
+  return res.json({ success: true, branding: (db as any).brandingConfig });
+});
+
+// Admin-authenticated endpoint (and fallback) for updating brand logo
+app.get('/api/admin/branding', (_req: Request, res: Response) => {
+  if (!(db as any).brandingConfig) {
+    (db as any).brandingConfig = { ...DEFAULT_BRANDING_CONFIG };
+  }
+  return res.json({ success: true, branding: (db as any).brandingConfig });
+});
+
+app.post(['/api/admin/branding', '/api/site-settings/branding'], async (req: Request, res: Response) => {
+  try {
+    const { logoUrl, brandName, tagline, logoShape, glowEffect, updatedBy } = req.body || {};
+    
+    if (!(db as any).brandingConfig) {
+      (db as any).brandingConfig = { ...DEFAULT_BRANDING_CONFIG };
+    }
+
+    (db as any).brandingConfig = {
+      ...(db as any).brandingConfig,
+      logoUrl: logoUrl !== undefined ? logoUrl : (db as any).brandingConfig.logoUrl,
+      brandName: brandName ? String(brandName).trim() : (db as any).brandingConfig.brandName,
+      tagline: tagline !== undefined ? String(tagline).trim() : (db as any).brandingConfig.tagline,
+      logoShape: logoShape || (db as any).brandingConfig.logoShape || 'circle',
+      glowEffect: glowEffect !== undefined ? Boolean(glowEffect) : true,
+      updatedAt: new Date().toISOString(),
+      updatedBy: updatedBy || 'admin'
+    };
+
+    saveDB();
+
+    // Bidirectional sync to Firestore if connected
+    if (firestoreDb) {
+      try {
+        await fsSetDoc(fsDoc(firestoreDb, 'site_settings', 'branding'), (db as any).brandingConfig, { merge: true });
+      } catch (fsErr: any) {
+        console.warn('Firestore branding sync warning:', fsErr?.message || fsErr);
+      }
+    }
+
+    // Broadcast live event to all connected SSE clients (workstations, seekers, dashboards)
+    broadcast('branding_updated', (db as any).brandingConfig);
+
+    return res.json({ success: true, branding: (db as any).brandingConfig });
+  } catch (err: any) {
+    console.error('Error in /api/admin/branding:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to update branding' });
+  }
+});
+
 // Assign role (Strictly Admin authenticated only, prevents unauthorized privilege escalation)
 app.post('/api/admin/roles/assign', requireAdmin, (req: Request, res: Response) => {
   const { email, role, name } = req.body;
@@ -2010,6 +2079,9 @@ try {
     const parsed = JSON.parse(raw);
     if (parsed.n8nConfig) {
       db.n8nConfig = { ...db.n8nConfig, ...parsed.n8nConfig };
+    }
+    if (parsed.brandingConfig) {
+      (db as any).brandingConfig = { ...DEFAULT_BRANDING_CONFIG, ...parsed.brandingConfig };
     }
     if (parsed.pricingConfig) {
       db.pricingConfig = { ...DEFAULT_PRICING_CONFIG, ...parsed.pricingConfig };

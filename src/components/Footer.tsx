@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, Sparkles } from 'lucide-react';
 import { LumysicLogo } from './LumysicLogo';
+import { useBrandSettings } from '../utils/brandSettings';
 
 interface FooterProps {
   onNavigateSection: (sectionId: string) => void;
@@ -17,6 +18,8 @@ export const Footer: React.FC<FooterProps> = ({
   currentLanguage = 'en',
   onSelectLanguage
 }) => {
+  const { branding } = useBrandSettings();
+
   const handleLegalClick = (policyId: string) => {
     if (policyId === 'contact' && onOpenContact) {
       onOpenContact();
@@ -189,12 +192,12 @@ export const Footer: React.FC<FooterProps> = ({
                 className="font-serif font-black tracking-[0.24em] text-base text-[#2B2418]"
                 style={{ fontFamily: "'Cinzel', 'Playfair Display', Georgia, serif" }}
               >
-                LUMSIC
+                {branding.brandName || 'LUMSIC'}
               </span>
             </div>
             <span className="text-[#B45309]/50">·</span>
             <span className="text-xs text-[#6F6654]">
-              © {new Date().getFullYear()} LUMSIC Sanctuary Inc. Global Self-Discovery Platform.
+              © {new Date().getFullYear()} {branding.brandName || 'LUMSIC'} Sanctuary Inc. Global Self-Discovery Platform.
             </span>
           </div>
 

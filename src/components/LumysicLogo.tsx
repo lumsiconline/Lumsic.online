@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useBrandSettings } from '../utils/brandSettings';
 
 interface LumysicLogoProps {
   size?: number; // pixel size for the icon, e.g. 84
   showText?: boolean;
   tagline?: string;
+  brandName?: string;
+  customLogoUrl?: string;
   className?: string;
   textClassName?: string;
   glow?: boolean;
@@ -13,10 +16,20 @@ export const LumysicLogo: React.FC<LumysicLogoProps> = ({
   size = 80,
   showText = false,
   tagline,
+  brandName,
+  customLogoUrl,
   className = '',
   textClassName = '',
   glow = true,
 }) => {
+  const { branding } = useBrandSettings();
+  const [imageError, setImageError] = useState(false);
+
+  const effectiveLogoUrl = customLogoUrl !== undefined ? customLogoUrl : (branding.logoUrl || '');
+  const effectiveBrandName = brandName || branding.brandName || 'LUMSIC';
+  const effectiveTagline = tagline || branding.tagline || 'Light • Mystic • Guidance';
+  const shape = branding.logoShape || 'circle';
+
   return (
     <div className={`flex flex-col items-center select-none ${className}`}>
       {/* Logo Emblem Container */}
@@ -31,13 +44,34 @@ export const LumysicLogo: React.FC<LumysicLogoProps> = ({
           />
         )}
 
-        {/* Master SVG Emblem matching the uploaded celestial Aries emblem */}
-        <svg
-          viewBox="0 0 200 200"
-          width={size}
-          height={size}
-          className="relative z-10 w-full h-full filter drop-shadow-[0_4px_16px_rgba(246,208,110,0.35)] transition-transform duration-300 hover:scale-105"
-        >
+        {/* CUSTOM UPLOADED LOGO (when configured and not errored) */}
+        {effectiveLogoUrl && !imageError ? (
+          <div 
+            className={`relative z-10 w-full h-full flex items-center justify-center overflow-hidden transition-transform duration-300 hover:scale-105 ${
+              shape === 'transparent'
+                ? ''
+                : shape === 'badge'
+                ? 'rounded-2xl border border-[#F6D06E]/50 bg-[#070B1F]/90 shadow-[0_4px_16px_rgba(246,208,110,0.25)] p-1'
+                : 'rounded-full border border-[#F6D06E]/50 bg-[#070B1F]/90 shadow-[0_4px_16px_rgba(246,208,110,0.25)] p-0.5'
+            }`}
+          >
+            <img
+              src={effectiveLogoUrl}
+              alt={effectiveBrandName}
+              className={`w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(246,208,110,0.3)] ${
+                shape === 'badge' ? 'rounded-xl' : shape === 'transparent' ? '' : 'rounded-full'
+              }`}
+              onError={() => setImageError(true)}
+            />
+          </div>
+        ) : (
+          /* Master SVG Emblem matching the celestial Aries emblem */
+          <svg
+            viewBox="0 0 200 200"
+            width={size}
+            height={size}
+            className="relative z-10 w-full h-full filter drop-shadow-[0_4px_16px_rgba(246,208,110,0.35)] transition-transform duration-300 hover:scale-105"
+          >
           <defs>
             {/* Outer Ring Gold Gradient */}
             <linearGradient id="lumysicGoldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -346,7 +380,8 @@ export const LumysicLogo: React.FC<LumysicLogoProps> = ({
             <circle cx="100" cy="162" r="1.8" fill="#FFF4D0" />
             <circle cx="100" cy="169" r="1.2" fill="#F6D06E" />
           </g>
-        </svg>
+          </svg>
+        )}
       </div>
 
       {/* Optional Brand Name & Tagline */}
@@ -360,15 +395,15 @@ export const LumysicLogo: React.FC<LumysicLogoProps> = ({
                 letterSpacing: '0.24em'
               }}
             >
-              LUMSIC
+              {effectiveBrandName}
             </span>
             {/* Subtle underglow line */}
             <div className="w-16 h-0.5 mx-auto mt-1 rounded-full bg-gradient-to-r from-transparent via-[#F6D06E]/70 to-transparent" />
           </div>
 
-          {tagline && (
+          {effectiveTagline && (
             <p className="mt-1 text-[11px] sm:text-xs tracking-[0.2em] uppercase font-medium text-[#FCE38A]/80">
-              {tagline}
+              {effectiveTagline}
             </p>
           )}
         </div>

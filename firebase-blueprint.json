@@ -91,6 +91,17 @@
       "properties": {
         "status": { "type": "string" }
       }
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global website branding, logo and configuration",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "brandName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -121,6 +132,10 @@
     "/wallets/{walletId}": {
       "schema": "WalletRecord",
       "description": "Customer wallet records"
+    },
+    "/site_settings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Global website branding and logo identity"
     },
     "/test/{testId}": {
       "schema": "TestConnection",

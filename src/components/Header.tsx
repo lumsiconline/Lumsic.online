@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { LumysicLogo } from './LumysicLogo';
 import { getCurrencySymbol } from '../utils/currency';
+import { useBrandSettings } from '../utils/brandSettings';
 
 export interface HeaderProps {
   onStartReading: () => void;
@@ -64,6 +65,9 @@ export const Header: React.FC<HeaderProps> = ({
   isOwnerAdmin = false,
   onOpenAdmin,
 }) => {
+  // Live Brand Identity & Logo Settings
+  const { branding } = useBrandSettings();
+
   // Navigation & Menu States
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -291,10 +295,10 @@ export const Header: React.FC<HeaderProps> = ({
                       fontFamily: "'Cinzel', 'Playfair Display', Georgia, serif"
                     }}
                   >
-                    LUMSIC
+                    {branding.brandName || 'LUMSIC'}
                   </span>
                   <span className="text-[8.5px] sm:text-[9.5px] tracking-[0.18em] text-[#FCE38A]/80 uppercase font-semibold hidden sm:block leading-none mt-0.5">
-                    Light • Mystic • Guidance
+                    {branding.tagline || 'Light • Mystic • Guidance'}
                   </span>
                 </div>
               </a>

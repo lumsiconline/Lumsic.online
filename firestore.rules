@@ -138,5 +138,11 @@ service cloud.firestore {
     match /activity_logs/{logId} {
       allow read, write: if isValidId(logId) && isAdmin();
     }
+
+    // 13. Site Settings & Branding (Public read for logo & site identity, write by admin or server)
+    match /site_settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

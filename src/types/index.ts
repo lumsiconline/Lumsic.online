@@ -416,3 +416,14 @@ export interface AssistantSettings {
   astrologerOverrides?: Record<string, any>;
   safetySettings?: Record<string, any>;
 }
+
+export interface SiteBrandingSettings {
+  logoUrl?: string;
+  brandName: string;
+  tagline: string;
+  logoShape?: 'circle' | 'transparent' | 'badge';
+  glowEffect?: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+

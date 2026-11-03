@@ -44,6 +44,8 @@ import { auth, signOutCurrentUser, AuthUserProfile, db } from '../lib/firebase';
 import { collection, doc, setDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { READERS } from '../data/readers';
 import { Reader, ConsultationSession, ChatMessage } from '../types';
+import { AdminLogoStudio } from './AdminLogoStudio';
+import { LumysicLogo } from './LumysicLogo';
 
 interface AdminCMSPanelProps {
   onBackToSite: () => void;
@@ -59,11 +61,12 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
   initialTab = 'inbox',
   currentAdminProfile
 }) => {
-  // Navigation tabs: 'overview' | 'inbox' | 'chats' | 'astrologers'
-  const [activeTab, setActiveTab] = useState<'overview' | 'inbox' | 'chats' | 'astrologers'>(() => {
+  // Navigation tabs: 'overview' | 'inbox' | 'chats' | 'astrologers' | 'branding'
+  const [activeTab, setActiveTab] = useState<'overview' | 'inbox' | 'chats' | 'astrologers' | 'branding'>(() => {
     if (initialTab === 'overview') return 'overview';
     if (initialTab === 'astrologers') return 'astrologers';
     if (initialTab === 'chats') return 'chats';
+    if (initialTab === 'branding' || initialTab === 'logo') return 'branding';
     return 'inbox';
   });
 
@@ -903,10 +906,8 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
           {/* Logo & Platform Status */}
           <div className="p-4 border-b border-slate-800/80">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 via-rose-600 to-indigo-600 p-0.5 shadow-md flex items-center justify-center shrink-0">
-                <div className="w-full h-full bg-[#070A12] rounded-[10px] flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                </div>
+              <div className="relative shrink-0">
+                <LumysicLogo size={34} glow={false} />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -1015,6 +1016,31 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
               </div>
               <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">
                 {stats.onlineAstrologers} Online
+              </span>
+            </button>
+
+            {/* 5. Website Logo & Branding Tab */}
+            <button
+              onClick={() => {
+                setActiveTab('branding');
+                setIsMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                activeTab === 'branding'
+                  ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-4 h-4" />
+                <span>Logo & Branding</span>
+              </div>
+              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full ${
+                activeTab === 'branding' 
+                  ? 'bg-slate-950 text-amber-300' 
+                  : 'bg-amber-400/15 text-amber-300 border border-amber-400/30'
+              }`}>
+                Live
               </span>
             </button>
 
@@ -1980,6 +2006,13 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
             </div>
 
           </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* SECTION 5: WEBSITE LOGO & BRAND IDENTITY STUDIO */}
+        {/* =================================================================== */}
+        {activeTab === 'branding' && (
+          <AdminLogoStudio onNotify={showToast} />
         )}
 
       </main>
