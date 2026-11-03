@@ -582,7 +582,7 @@ export default function App() {
       return;
     }
 
-    if (sectionId === 'shop' || sectionId === 'astral-shop' || sectionId === 'store') {
+    if (sectionId === 'shop' || sectionId === 'astral-shop' || sectionId === 'store' || sectionId === 'mall') {
       setIsShopOpen(true);
       return;
     }
@@ -1015,7 +1015,7 @@ export default function App() {
 
       {/* MOBILE BOTTOM NAVIGATION */}
       <MobileBottomNav
-        activeSection={isWalletOpen ? 'chatroom' : currentSection}
+        activeSection={isWalletOpen ? 'chatroom' : isShopOpen ? 'mall' : currentSection}
         onNavigateSection={handleNavigateSection}
         onGoHome={handleGoHome}
         onOpenProfile={() => setIsDashboardOpen(true)}
@@ -1023,7 +1023,8 @@ export default function App() {
           setWalletInitialTab('order');
           setIsWalletOpen(true);
         }}
-        onOpenRituals={() => handleNavigateSection('rituals')}
+        onOpenMall={() => setIsShopOpen(true)}
+        onOpenRituals={() => setIsShopOpen(true)}
         onOpenTarot={() => setIsTarotModalOpen(true)}
         onOpenHoroscope={() => setIsHoroscopeModalOpen(true)}
       />

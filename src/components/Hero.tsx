@@ -107,16 +107,14 @@ export const Hero: React.FC<HeroProps> = ({
 
           </div>
 
-          {/* Right Column: 3D Fanned Cards & Radiant Celestial Orb (Responsive on mobile and desktop) */}
-          <div className="flex lg:col-span-5 items-center justify-center relative mt-6 lg:mt-0 w-full overflow-hidden">
-            <div className="scale-[0.82] xs:scale-[0.9] sm:scale-95 md:scale-100 origin-center transition-transform">
-              <MysticFannedCardsHero
-                onOpenBirthChart={onCreateBirthChart}
-                onOpenTarot={onCreateBirthChart}
-                onOpenCompatibility={onOpenCompatibility}
-                onStartReading={onFindAstrologer}
-              />
-            </div>
+          {/* Right Column: 3D Fanned Cards (Hidden on mobile phone view, visible on tablet and desktop) */}
+          <div className="hidden md:flex lg:col-span-5 items-center justify-center relative mt-8 lg:mt-0">
+            <MysticFannedCardsHero
+              onOpenBirthChart={onCreateBirthChart}
+              onOpenTarot={onCreateBirthChart}
+              onOpenCompatibility={onOpenCompatibility}
+              onStartReading={onFindAstrologer}
+            />
           </div>
 
         </div>
