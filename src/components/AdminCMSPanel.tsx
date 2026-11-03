@@ -74,11 +74,33 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
   const [sessions, setSessions] = useState<ConsultationSession[]>([]);
   const [readers, setReaders] = useState<Reader[]>(READERS);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const selectedSessionIdRef = useRef<string | null>(null);
+  const [draftsBySessionId, setDraftsBySessionId] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
+  // Sync ref with selected session state
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSessionId;
+  }, [selectedSessionId]);
+
+  // WhatsApp-style session selection handler (switches cleanly and preserves draft text)
+  const handleSelectSession = (sessionId: string) => {
+    if (!sessionId) return;
+    const currentId = selectedSessionIdRef.current;
+    if (currentId && currentId !== sessionId) {
+      setDraftsBySessionId(prev => ({
+        ...prev,
+        [currentId]: replyText
+      }));
+    }
+    setReplyText(draftsBySessionId[sessionId] || '');
+    selectedSessionIdRef.current = sessionId;
+    setSelectedSessionId(sessionId);
+  };
 
   // Declined Sessions tracking so declined chats NEVER popup again
   const [declinedIds, setDeclinedIds] = useState<Set<string>>(() => {
@@ -281,15 +303,24 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
         console.warn('Firestore initial fetch notice:', fsErr);
       }
 
-      const mergedList = Array.from(sessionMap.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      const mergedList = Array.from(sessionMap.values()).sort((a, b) => {
+        const timeA = new Date(a.lastMessageAt || a.createdAt).getTime();
+        const timeB = new Date(b.lastMessageAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
       setSessions(mergedList);
 
-      // Auto-select first session if none selected
-      if (!selectedSessionId && mergedList.length > 0) {
-        setSelectedSessionId(mergedList[0].id);
-      }
+      // WhatsApp-Style Multi-Chat Stability:
+      // Once a conversation is active or selected, NEVER auto-switch or reset to the first chat!
+      setSelectedSessionId(prev => {
+        if (prev) {
+          return prev;
+        }
+        if (selectedSessionIdRef.current) {
+          return selectedSessionIdRef.current;
+        }
+        return mergedList.length > 0 ? mergedList[0].id : null;
+      });
     } catch (err) {
       console.warn('Admin fetch data notice:', err);
     } finally {
@@ -462,7 +493,15 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
   // Selected Conversation Object
   const selectedSession = useMemo(() => {
-    return sessions.find(s => s.id === selectedSessionId) || sessions[0] || null;
+    if (selectedSessionId) {
+      const match = sessions.find(s => s.id === selectedSessionId);
+      if (match) return match;
+    }
+    if (selectedSessionIdRef.current) {
+      const match = sessions.find(s => s.id === selectedSessionIdRef.current);
+      if (match) return match;
+    }
+    return sessions[0] || null;
   }, [sessions, selectedSessionId]);
 
   // Filtered Conversations for Inbox List
@@ -598,7 +637,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
     // 2. Update local state & select for active chat
     setSessions(prev => prev.map(s => s.id === updatedSession.id ? updatedSession : s));
-    setSelectedSessionId(updatedSession.id);
+    handleSelectSession(updatedSession.id);
     setActiveTab('inbox');
     saveStoredSession(updatedSession);
     broadcastSessionEvent('session_accepted', updatedSession);
@@ -672,6 +711,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     if (!selectedSession || !replyText.trim() || isSendingReply) return;
     const text = replyText.trim();
     setReplyText('');
+    setDraftsBySessionId(prev => ({ ...prev, [selectedSession.id]: '' }));
     setIsSendingReply(true);
 
     // Immediately cancel and reset typing indicators
@@ -1189,7 +1229,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                     <div 
                       key={sess.id}
                       onClick={() => {
-                        setSelectedSessionId(sess.id);
+                        handleSelectSession(sess.id);
                         setActiveTab('inbox');
                       }}
                       className="py-3 px-2 rounded-xl hover:bg-slate-900/60 transition cursor-pointer flex items-center justify-between gap-4"
@@ -1366,7 +1406,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                     return (
                       <div
                         key={sess.id}
-                        onClick={() => setSelectedSessionId(sess.id)}
+                        onClick={() => handleSelectSession(sess.id)}
                         className={`p-3 transition cursor-pointer flex items-start gap-3 relative ${
                           isSelected
                             ? 'bg-slate-800/70 border-l-4 border-rose-500'
@@ -1792,7 +1832,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                               )}
                               <button
                                 onClick={() => {
-                                  setSelectedSessionId(sess.id);
+                                  handleSelectSession(sess.id);
                                   setActiveTab('inbox');
                                 }}
                                 className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-semibold transition cursor-pointer"
