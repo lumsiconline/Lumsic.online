@@ -36,9 +36,8 @@ export const Hero: React.FC<HeroProps> = ({
     <section id="home" className="relative pt-5 pb-7 sm:pt-9 sm:pb-12 bg-gradient-to-b from-[#060A1C] via-[#09112E] to-[#060918] border-b border-indigo-950/60 overflow-hidden text-white">
       
       {/* Subtle Cosmic Starlight & Nebula Glow in Background */}
-      <div className="absolute inset-0 pointer-events-none opacity-40">
+      <div className="absolute inset-0 pointer-events-none opacity-25">
         <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-cyan-500/10 blur-[120px]" />
-        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] rounded-full bg-amber-400/15 blur-[140px]" />
         <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 w-[800px] h-[300px] rounded-full bg-indigo-600/15 blur-[100px]" />
       </div>
 
@@ -108,13 +107,16 @@ export const Hero: React.FC<HeroProps> = ({
 
           </div>
 
-          {/* Right Column: 3D Fanned Cards & Radiant Celestial Orb (Hidden on mobile, visible on tablet and desktop) */}
-          <div className="hidden md:flex lg:col-span-5 items-center justify-center relative mt-8 lg:mt-0">
-            <MysticFannedCardsHero
-              onOpenBirthChart={onCreateBirthChart}
-              onOpenTarot={onCreateBirthChart}
-              onOpenCompatibility={onOpenCompatibility}
-            />
+          {/* Right Column: 3D Fanned Cards & Radiant Celestial Orb (Responsive on mobile and desktop) */}
+          <div className="flex lg:col-span-5 items-center justify-center relative mt-6 lg:mt-0 w-full overflow-hidden">
+            <div className="scale-[0.82] xs:scale-[0.9] sm:scale-95 md:scale-100 origin-center transition-transform">
+              <MysticFannedCardsHero
+                onOpenBirthChart={onCreateBirthChart}
+                onOpenTarot={onCreateBirthChart}
+                onOpenCompatibility={onOpenCompatibility}
+                onStartReading={onFindAstrologer}
+              />
+            </div>
           </div>
 
         </div>

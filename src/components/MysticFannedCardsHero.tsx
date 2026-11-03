@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, Moon, Sun, Heart, Briefcase, Compass, Star, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
+import { Heart, Flame, RefreshCw, Compass, Sparkles, ChevronRight } from 'lucide-react';
 
 interface MysticFannedCardsHeroProps {
   onSelectCard?: (cardId: string) => void;
   onOpenBirthChart?: () => void;
   onOpenTarot?: () => void;
   onOpenCompatibility?: () => void;
+  onStartReading?: (topic?: string) => void;
 }
 
 interface DeckCard {
@@ -24,9 +25,11 @@ interface DeckCard {
 }
 
 export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
+  onSelectCard,
   onOpenBirthChart,
   onOpenTarot,
-  onOpenCompatibility
+  onOpenCompatibility,
+  onStartReading
 }) => {
   // 5 Physical slots arranged in an arc from LEFT to RIGHT
   // Slot 0 = Far Left, Slot 1 = Mid Left, Slot 2 = CENTER (OPEN), Slot 3 = Mid Right, Slot 4 = Far Right
@@ -38,84 +41,82 @@ export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
     { x: 175,  y: 26, rot: 22,  scale: 0.82, zIndex: 10, opacity: 0.55, isCenter: false },
   ];
 
-  // The Deck Cards in order: 0: Love Life, 1: Career, 2: Life, 3: Palm Reading, 4: Cosmic Tarot
+  // Exactly 5 Love & Destiny Deck Cards
   const DECK: DeckCard[] = [
     {
-      id: 'love-life',
-      title: 'Love Life',
-      tagline: 'Soulmate & Heart',
+      id: 'love-destiny',
+      title: 'LOVE DESTINY',
+      tagline: 'LOVE & RELATIONSHIPS',
       icon: Heart,
       iconSymbol: '❤️',
       cornerSymbol: '☾',
       secondarySymbol: '♡',
-      desc: 'Discover true soulmate alignment, partner intentions, marriage timing & emotional connection.',
+      desc: "Will you find the love you've been waiting for?",
       actionLabel: 'Explore Love Reading',
       gradient: 'from-[#161C42] via-[#20275C] to-[#0E132D]',
       glowColor: 'border-rose-400 shadow-rose-500/25',
       isMainThree: true
     },
     {
-      id: 'career',
-      title: 'Career',
-      tagline: 'Wealth & Growth',
-      icon: Briefcase,
-      iconSymbol: '💼',
+      id: 'breakup-healing',
+      title: 'BREAKUP & HEALING',
+      tagline: 'HEARTBREAK JOURNEY',
+      icon: Flame,
+      iconSymbol: '💔',
       cornerSymbol: '☼',
-      secondarySymbol: '✦',
-      desc: 'Clarity on promotions, job transitions, business ventures, wealth cycles & career milestones.',
-      actionLabel: 'Explore Career Forecast',
-      gradient: 'from-[#14224C] via-[#1D306C] to-[#0D1635]',
+      secondarySymbol: '✧',
+      desc: 'Is this chapter really over, or is another beginning possible?',
+      actionLabel: 'Explore Breakup Reading',
+      gradient: 'from-[#172049] via-[#222E64] to-[#0F1634]',
       glowColor: 'border-amber-400 shadow-amber-500/25',
       isMainThree: true
     },
     {
-      id: 'life',
-      title: 'Life',
-      tagline: 'Destiny & Purpose',
-      icon: Compass,
-      iconSymbol: '✦',
-      cornerSymbol: '✋',
-      secondarySymbol: '👁️',
-      desc: 'Unveil your sacred life path, karmic blueprint, spiritual awakening & personal direction.',
-      actionLabel: 'Explore Life Guidance',
-      gradient: 'from-[#122752] via-[#1A3772] to-[#0C1B3A]',
+      id: 'ex-reunion',
+      title: 'EX & REUNION',
+      tagline: 'PAST LOVE CONNECTION',
+      icon: RefreshCw,
+      iconSymbol: '🔄',
+      cornerSymbol: '✦',
+      secondarySymbol: '∞',
+      desc: 'Will your ex come back into your life?',
+      actionLabel: 'Explore Reunion',
+      gradient: 'from-[#14234E] via-[#1D326E] to-[#0D1737]',
       glowColor: 'border-cyan-400 shadow-cyan-500/25',
       isMainThree: true
     },
     {
-      id: 'palm-reading',
-      title: 'Palm Reading',
-      tagline: 'Ancient Life Lines',
-      icon: Star,
-      iconSymbol: '✋',
+      id: 'future-meeting',
+      title: 'FUTURE MEETING',
+      tagline: 'YOUR NEXT CONNECTION',
+      icon: Compass,
+      iconSymbol: '✨',
       cornerSymbol: '✧',
       secondarySymbol: '⭐',
-      desc: 'Sacred palmistry insights on health lines, heart vitality, destiny marks & intuitive energy.',
-      actionLabel: 'Explore Palmistry',
-      gradient: 'from-[#101D44] via-[#172960] to-[#0B1430]',
+      desc: 'When will you meet someone special?',
+      actionLabel: 'Explore Future Meeting',
+      gradient: 'from-[#122855] via-[#1A3876] to-[#0C1B3C]',
       glowColor: 'border-amber-300 shadow-amber-400/20',
-      isMainThree: false
+      isMainThree: true
     },
     {
-      id: 'tarot-oracle',
-      title: 'Cosmic Tarot',
-      tagline: 'Universal Truths',
-      icon: Moon,
-      iconSymbol: '🎴',
+      id: 'soulmate-connection',
+      title: 'SOULMATE CONNECTION',
+      tagline: 'DESTINED LOVE',
+      icon: Sparkles,
+      iconSymbol: '🔮',
       cornerSymbol: '✦',
       secondarySymbol: '🌙',
-      desc: '78 archetypal keys revealing immediate subconscious guidance and fate crossroads.',
-      actionLabel: 'Draw Daily Card',
-      gradient: 'from-[#131B3E] via-[#1C2556] to-[#0C122C]',
+      desc: 'Who is your soulmate, and when might you meet?',
+      actionLabel: 'Explore Soulmate Reading',
+      gradient: 'from-[#161B40] via-[#212759] to-[#0E122B]',
       glowColor: 'border-indigo-400 shadow-indigo-500/20',
-      isMainThree: false
+      isMainThree: true
     }
   ];
 
   // Shift offset: increments automatically so cards physically slide left-to-right!
-  // At step = 0: Card 0 (Love Life) is at Slot 2 (Center)
-  // To move cards LEFT TO RIGHT:
-  // When card moves from slot 1 -> slot 2 -> slot 3, position index increases!
+  // At step = 0: Card 0 (LOVE DESTINY) is at Slot 2 (Center)
   const [step, setStep] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
 
@@ -131,31 +132,24 @@ export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
     return () => clearInterval(timer);
   }, [isPaused]);
 
-  // Function to move cards left to right manually
-  const moveNext = () => {
-    setStep((prev) => prev + 1);
-  };
-
-  const movePrev = () => {
-    setStep((prev) => prev - 1);
-  };
-
-  // Jump to specific main card in the center (0 = Love Life, 1 = Career, 2 = Life)
+  // Jump to specific card in the center (0 to 4)
   const jumpToCard = (targetCardIndex: number) => {
-    // We want card `targetCardIndex` to end up at Slot 2 (Center):
-    // Slot = (i + step) % 5 === 2 => step === (2 - targetCardIndex + 5000) % 5
     const currentSlot = (targetCardIndex + step) % 5;
     const diff = (2 - currentSlot + 5) % 5;
     setStep((prev) => prev + diff);
   };
 
   const handleCardAction = (card: DeckCard) => {
-    if (card.id === 'love-life' && onOpenCompatibility) {
+    if (onStartReading) {
+      onStartReading(card.title);
+    } else if (onSelectCard) {
+      onSelectCard(card.id);
+    } else if (onOpenCompatibility) {
       onOpenCompatibility();
-    } else if (card.id === 'career' && onOpenBirthChart) {
-      onOpenBirthChart();
     } else if (onOpenTarot) {
       onOpenTarot();
+    } else if (onOpenBirthChart) {
+      onOpenBirthChart();
     }
   };
 
@@ -166,52 +160,7 @@ export const MysticFannedCardsHero: React.FC<MysticFannedCardsHeroProps> = ({
       onMouseLeave={() => setIsPaused(false)}
     >
       
-      {/* 1. CENTRAL CELESTIAL GLOWING CRYSTAL ORB */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
-        {/* Soft Radial Ambient Nebula Glow in Astral Gold & Cyan */}
-        <div className="w-[350px] sm:w-[440px] h-[350px] sm:h-[440px] rounded-full bg-gradient-to-tr from-amber-400/20 via-cyan-400/15 to-indigo-500/25 blur-3xl animate-pulse" />
-
-        {/* Concentric Rotating Astrolabe Rings */}
-        <div className="absolute w-[330px] sm:w-[400px] h-[330px] sm:h-[400px] rounded-full border border-amber-300/25 border-dashed animate-celestial-orbit pointer-events-none" />
-        <div className="absolute w-[250px] sm:w-[310px] h-[250px] sm:h-[310px] rounded-full border border-cyan-400/20 animate-celestial-orbit-reverse pointer-events-none" />
-
-        {/* 3D Glass Crystal Orb (as seen in screenshot behind cards) */}
-        <div className="relative w-38 h-38 sm:w-46 sm:h-46 rounded-full bg-gradient-to-b from-[#1C2C64] via-[#0E1738] to-[#060A1A] border-2 border-amber-300/40 shadow-2xl shadow-cyan-500/20 flex items-center justify-center overflow-hidden">
-          <div className="absolute top-2 left-6 w-18 h-8 rounded-full bg-white/20 blur-sm transform -rotate-12" />
-          
-          <div className="relative flex flex-col items-center justify-center text-amber-200">
-            <div className="w-12 h-12 rounded-full border border-amber-300/40 flex items-center justify-center bg-amber-400/10 shadow-inner">
-              <Eye className="w-6 h-6 text-amber-300 animate-pulse" />
-            </div>
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-300 shadow-sm shadow-cyan-300 mt-2" />
-          </div>
-
-          <div className="absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-        </div>
-      </div>
-
-      {/* 2. LEFT / RIGHT SMOOTH GLIDE ARROWS (FOR PHYSICAL MOVEMENT) */}
-      <button
-        type="button"
-        onClick={movePrev}
-        className="absolute -left-3 sm:-left-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-[#060A1C]/80 hover:bg-[#0E1538] border border-amber-300/40 text-amber-300 flex items-center justify-center shadow-xl backdrop-blur-md transition-all active:scale-90 cursor-pointer"
-        aria-label="Previous card"
-        title="Slide card left"
-      >
-        <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
-      </button>
-
-      <button
-        type="button"
-        onClick={moveNext}
-        className="absolute -right-3 sm:-right-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-[#060A1C]/80 hover:bg-[#0E1538] border border-amber-300/40 text-amber-300 flex items-center justify-center shadow-xl backdrop-blur-md transition-all active:scale-90 cursor-pointer"
-        aria-label="Next card"
-        title="Slide card right"
-      >
-        <ChevronRight className="w-5 h-5 stroke-[2.5]" />
-      </button>
-
-      {/* 3. PHYSICAL 5-CARD SHUFFLING DECK (CONTINUOUSLY GLIDING FROM LEFT TO RIGHT) */}
+      {/* 5-CARD SHUFFLING DECK (CONTINUOUSLY GLIDING FROM LEFT TO RIGHT) */}
       <div className="relative z-30 w-full h-full flex items-center justify-center">
         {DECK.map((card, cardIndex) => {
           // Calculate this card's slot in the 5-slot physical arc
