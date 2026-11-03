@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Reader, ConsultationSession, ChatMessage } from '../types';
+import { openInNewTab } from '../utils/openNewTab';
 import { 
   ArrowLeft, 
   Phone, 
@@ -1092,16 +1093,22 @@ export const AstroboardView: React.FC<AstroboardViewProps> = ({
             </div>
 
             {/* Direct Admin link if available */}
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="hidden md:flex text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors items-center gap-1.5 cursor-pointer"
-                title="Go to Admin Panel"
-              >
-                <Shield className="w-3.5 h-3.5 text-rose-600" />
-                <span>Admin CMS</span>
-              </button>
-            )}
+            <a
+              href="/admin.html?tab=overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (onOpenAdmin) {
+                  e.preventDefault();
+                  openInNewTab('/admin.html?tab=overview');
+                }
+              }}
+              className="hidden md:flex text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors items-center gap-1.5 cursor-pointer"
+              title="Open Admin CMS in new tab"
+            >
+              <Shield className="w-3.5 h-3.5 text-rose-600" />
+              <span>Admin CMS</span>
+            </a>
 
             {/* Test incoming chat alert simulation */}
             <button

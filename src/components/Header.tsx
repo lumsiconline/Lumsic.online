@@ -461,16 +461,23 @@ export const Header: React.FC<HeaderProps> = ({
             ========================================================================= */}
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               {/* OWNER ADMIN BUTTON (Strictly for owner bankush014@gmail.com) */}
-              {isOwnerAdmin && onOpenAdmin && (
-                <button
-                  type="button"
-                  onClick={onOpenAdmin}
+              {isOwnerAdmin && (
+                <a
+                  href="/admin.html?tab=overview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    if (onOpenAdmin) {
+                      e.preventDefault();
+                      onOpenAdmin();
+                    }
+                  }}
                   className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-8.5 sm:h-9 rounded-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 hover:from-amber-500/35 hover:to-amber-600/35 border border-amber-400/80 text-amber-300 hover:text-amber-100 text-xs font-bold transition-all shadow-[0_0_14px_rgba(245,197,66,0.35)] hover:shadow-[0_0_22px_rgba(245,197,66,0.6)] active:scale-95 cursor-pointer shrink-0"
-                  title="Open Admin Command Center"
+                  title="Open Admin Command Center in new tab"
                 >
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="hidden sm:inline font-semibold tracking-wide">Admin Panel</span>
-                </button>
+                </a>
               )}
 
               {/* Mobile Search Button */}

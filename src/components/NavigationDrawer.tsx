@@ -2,6 +2,7 @@ import {
   X, Headphones, Wallet, Clock, Gift, Settings, Edit3, LogOut, ShieldCheck, ChevronRight, Share2, MessageSquare, Compass, ShoppingBag 
 } from 'lucide-react';
 import { CustomerProfile } from '../types';
+import { openInNewTab } from '../utils/openNewTab';
 
 interface NavigationDrawerProps {
   isOpen: boolean;
@@ -146,8 +147,11 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         icon: ShieldCheck,
         action: () => {
           onClose();
-          if (onOpenAdmin) onOpenAdmin();
-          else window.location.href = '/admin.html';
+          if (onOpenAdmin) {
+            onOpenAdmin();
+          } else {
+            openInNewTab('/admin.html?tab=overview');
+          }
         }
       },
       {
@@ -156,7 +160,11 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         icon: Compass,
         action: () => {
           onClose();
-          if (onOpenAstrologerDashboard) onOpenAstrologerDashboard();
+          if (onOpenAstrologerDashboard) {
+            onOpenAstrologerDashboard();
+          } else {
+            openInNewTab('/admin.html?tab=chats');
+          }
         }
       }
     ] : [])

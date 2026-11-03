@@ -43,6 +43,7 @@ import { ViewAllReadersPage } from './components/ViewAllReadersPage';
 import { AstralStoreWhiteView } from './components/AstralStoreWhiteView';
 import { UserChatHistoryModal } from './components/UserChatHistoryModal';
 import { LegalPolicyPage, PolicyPageId } from './components/LegalPolicyPage';
+import { openInNewTab } from './utils/openNewTab';
 import { detectUserGeo, CountryInfo } from './utils/currency';
 import { Reader, ConsultationSession, CustomerProfile, ConsultationStartData, ChatMessage } from './types';
 import { READERS } from './data/readers';
@@ -73,7 +74,10 @@ export default function App() {
         path.includes('/admin') ||
         hash.includes('/admin') ||
         params.get('admin') === 'true' ||
-        params.get('panel') === 'admin'
+        params.get('panel') === 'admin' ||
+        params.get('astroboard') === 'true' ||
+        params.get('astrologer') === 'true' ||
+        params.get('tab') === 'chats'
       ) {
         return true;
       }
@@ -870,10 +874,16 @@ export default function App() {
     : readers[0];
 
   if (isAdminView) {
+    const isAstro = typeof window !== 'undefined' && (
+      window.location.pathname.toLowerCase().includes('astrologer') ||
+      new URLSearchParams(window.location.search).get('tab') === 'chats' ||
+      new URLSearchParams(window.location.search).get('astroboard') === 'true' ||
+      new URLSearchParams(window.location.search).get('astrologer') === 'true'
+    );
     return (
       <AdminStandaloneApp
         onBackToSite={() => setIsAdminView(false)}
-        initialTab={typeof window !== 'undefined' && window.location.pathname.toLowerCase().includes('astrologer') ? 'chats' : undefined}
+        initialTab={isAstro ? 'chats' : 'overview'}
       />
     );
   }
@@ -910,7 +920,7 @@ export default function App() {
             setIsWalletOpen(true);
           }}
           isOwnerAdmin={isOwnerAdmin}
-          onOpenAdmin={() => setIsAdminView(true)}
+          onOpenAdmin={() => openInNewTab('/admin.html?tab=overview')}
         />
       </div>
 
@@ -1193,11 +1203,11 @@ export default function App() {
         }}
         onOpenAdmin={() => {
           setIsDrawerOpen(false);
-          setIsAdminView(true);
+          openInNewTab('/admin.html?tab=overview');
         }}
         onOpenAstrologerDashboard={() => {
           setIsDrawerOpen(false);
-          setIsAdminView(true);
+          openInNewTab('/admin.html?tab=chats');
         }}
       />
 
@@ -1380,23 +1390,35 @@ export default function App() {
       {/* Floating Admin Panel Quick Switcher Button (Strictly for authorized owner: bankush014@gmail.com) */}
       {isOwnerAdmin && (
         <div className="fixed bottom-20 left-4 z-50 flex items-center gap-2">
-          <button
-            onClick={() => setIsAdminView(true)}
+          <a
+            href="/admin.html?tab=overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              openInNewTab('/admin.html?tab=overview');
+            }}
             className="px-3 py-2 rounded-xl bg-slate-950/90 hover:bg-slate-900 text-amber-300 hover:text-amber-200 border border-amber-500/40 shadow-xl backdrop-blur-md text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
-            title="Open Admin CMS & n8n Automation Dashboard"
+            title="Open Admin CMS & n8n Automation Dashboard in new tab"
           >
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span>Admin Panel</span>
-          </button>
+          </a>
 
-          <button
-            onClick={() => setIsAdminView(true)}
+          <a
+            href="/admin.html?tab=chats"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              openInNewTab('/admin.html?tab=chats');
+            }}
             className="px-3 py-2 rounded-xl bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-400/50 shadow-xl backdrop-blur-md text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
-            title="Open Astrologer Workstation & Live Console"
+            title="Open Astrologer Workstation & Live Console in new tab"
           >
             <Compass className="w-4 h-4 text-amber-300" />
             <span>Astrologer Dashboard</span>
-          </button>
+          </a>
         </div>
       )}
     </div>
