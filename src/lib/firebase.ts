@@ -10,37 +10,46 @@ import {
   User 
 } from 'firebase/auth';
 import { 
+  initializeFirestore,
   getFirestore, 
   doc, 
   getDoc, 
-  setDoc, 
-  getDocFromServer 
+  setDoc 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// CRITICAL (from SKILL.md): must pass firestoreDatabaseId
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+// Initialize Firestore with long-polling transport fallback to prevent WebChannel 10s timeout in container/browser environments
+let firestoreDb: ReturnType<typeof getFirestore>;
+try {
+  firestoreDb = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  }, (firebaseConfig as any).firestoreDatabaseId);
+} catch {
+  // If already initialized (e.g. during fast reloads), retrieve existing instance
+  firestoreDb = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+}
+
+export const db = firestoreDb;
 export const auth = getAuth(app);
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// SKILL.md: Validate Connection to Firestore on startup
+// Safe connection validator helper that operates gracefully with offline cache
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
+    const testSnap = await getDoc(doc(db, 'test', 'connection'));
+    return testSnap.exists();
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Firestore client is offline, check connection.");
+      console.warn("Firestore client is operating offline with local persistence.");
     }
     return false;
   }
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',

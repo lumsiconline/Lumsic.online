@@ -37,6 +37,7 @@ import {
   saveStoredSession, 
   appendMessageToStoredSession, 
   broadcastSessionEvent, 
+  deduplicateMessages,
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
 import { auth, signOutCurrentUser, AuthUserProfile, db } from '../lib/firebase';
@@ -328,7 +329,11 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
             remoteSessions.forEach(s => {
               const existing = map.get(s.id);
-              map.set(s.id, { ...(existing || {}), ...s });
+              map.set(s.id, { 
+                ...(existing || {}), 
+                ...s, 
+                messages: deduplicateMessages(s.messages || existing?.messages || []) 
+              });
             });
 
             return Array.from(map.values()).sort(
@@ -370,14 +375,12 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
             setSessions(prev => prev.map(s => {
               if (s.id === sessId) {
                 const msgs = s.messages || [];
-                if (!msgs.some(m => m.id === msg.id)) {
-                  return { 
-                    ...s, 
-                    messages: [...msgs, msg], 
-                    lastMessageText: msg.text, 
-                    lastMessageAt: msg.timestamp 
-                  };
-                }
+                return { 
+                  ...s, 
+                  messages: deduplicateMessages([...msgs, msg]), 
+                  lastMessageText: msg.text, 
+                  lastMessageAt: msg.timestamp 
+                };
               }
               return s;
             }));
@@ -529,6 +532,43 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
     return `${Math.floor(diff / 86400)}d ago`;
   };
 
+  // Helper: 3-Minute Consultation Countdown Timer (Exact match with Seeker LiveChatView)
+  const getSessionTimer = (sess: ConsultationSession) => {
+    const msgs = sess.messages || [];
+    const firstAstroMsg = msgs.find(m => m.sender === 'astrologer' && !m.isSystemNotice);
+    const totalSeconds = 180 + (sess.paidSeconds || 0);
+
+    // If astrologer has not sent their 1st reply yet, timer stays at 03:00 (180s)
+    if (!firstAstroMsg?.timestamp) {
+      const mins = Math.floor(totalSeconds / 60);
+      const secs = totalSeconds % 60;
+      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      return {
+        hasStarted: false,
+        isExpired: false,
+        secondsRemaining: totalSeconds,
+        formatted,
+        statusText: 'Starts on 1st reply'
+      };
+    }
+
+    const replyTime = new Date(firstAstroMsg.timestamp).getTime();
+    const elapsedSeconds = Math.max(0, Math.floor((nowTimestamp - replyTime) / 1000));
+    const secondsRemaining = Math.max(0, totalSeconds - elapsedSeconds);
+    const mins = Math.floor(secondsRemaining / 60);
+    const secs = secondsRemaining % 60;
+    const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    const isExpired = secondsRemaining === 0;
+
+    return {
+      hasStarted: true,
+      isExpired,
+      secondsRemaining,
+      formatted,
+      statusText: isExpired ? 'Time Expired' : 'Running'
+    };
+  };
+
   // =========================================================================
   // ACTIONS: ACCEPT & ATTEND INCOMING CHAT (STOPS SOUND & OPENS CHAT)
   // =========================================================================
@@ -660,7 +700,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
       status: 'active',
       isAstrologerTyping: false,
       astrologerTypingAt: 0,
-      messages: [...(selectedSession.messages || []), newMsg],
+      messages: deduplicateMessages([...(selectedSession.messages || []), newMsg]),
       lastMessageText: text,
       lastMessageAt: newMsg.timestamp,
       unreadForOperator: false
@@ -683,7 +723,8 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
         body: JSON.stringify({
           sender: 'astrologer',
           senderName,
-          text
+          text,
+          messageId: newMsg.id
         })
       });
     } catch (err) {
@@ -1371,7 +1412,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                             {sess.lastMessageText || sess.initialQuestion || 'Consultation started'}
                           </p>
 
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
                             <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded-full ${
                               isDeclined
                                 ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
@@ -1383,7 +1424,25 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                             }`}>
                               {isDeclined ? 'Declined' : isWaiting ? 'Pending Pickup' : sess.status}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
+
+                            {/* Live Running Timer Pill in Session List */}
+                            {(() => {
+                              const timer = getSessionTimer(sess);
+                              return (
+                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md flex items-center gap-1 border ${
+                                  timer.isExpired
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                                    : timer.hasStarted
+                                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                                    : 'bg-slate-800/80 text-slate-400 border-slate-700/60'
+                                }`}>
+                                  <Clock className={`w-2.5 h-2.5 ${timer.isExpired ? 'text-rose-400' : timer.hasStarted ? 'text-amber-400' : 'text-slate-400'}`} />
+                                  <span>{timer.formatted}</span>
+                                </span>
+                              );
+                            })()}
+
+                            <span className="text-[10px] text-slate-500 font-mono ml-auto">
                               {getElapsedText(sess.createdAt)}
                             </span>
                           </div>
@@ -1404,7 +1463,7 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                   {/* Conversation Header */}
                   <div className="p-3.5 border-b border-slate-800 bg-[#070A12]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                     <div>
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 flex-wrap">
                         <h3 className="text-base font-bold text-white tracking-tight">
                           {selectedSession.customerName || 'Valued Seeker'}
                         </h3>
@@ -1423,6 +1482,33 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
                             ? 'Pending Pickup' 
                             : selectedSession.status}
                         </span>
+
+                        {/* LIVE RUNNING 3-MINUTE CONSULTATION TIMER (Identical to Seeker LiveChatView) */}
+                        {(() => {
+                          const timer = getSessionTimer(selectedSession);
+                          return (
+                            <div 
+                              className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold border transition shadow-sm ${
+                                timer.isExpired
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse'
+                                  : timer.hasStarted
+                                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/40 shadow-xs'
+                                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}
+                              title={
+                                timer.hasStarted
+                                  ? timer.isExpired ? '3-minute consultation has expired' : `Time remaining: ${timer.formatted}`
+                                  : `3-minute countdown begins when you send your first message`
+                              }
+                            >
+                              <Clock className={`w-3.5 h-3.5 ${timer.isExpired ? 'text-rose-400' : timer.hasStarted ? 'text-amber-400 animate-spin' : 'text-slate-400'}`} />
+                              <span className="font-mono text-sm tracking-wide font-extrabold">{timer.formatted}</span>
+                              <span className="text-[9px] uppercase font-sans font-semibold opacity-90 hidden sm:inline">
+                                {timer.isExpired ? 'Expired' : timer.hasStarted ? 'Live' : '3 Min Free'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
@@ -1479,8 +1565,8 @@ export const AdminCMSPanel: React.FC<AdminCMSPanelProps> = ({
 
                   {/* Chat Messages Feed */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
-                    {(selectedSession.messages && selectedSession.messages.length > 0) ? (
-                      selectedSession.messages.map((msg, index) => {
+                    {deduplicateMessages(selectedSession.messages || []).length > 0 ? (
+                      deduplicateMessages(selectedSession.messages || []).map((msg, index) => {
                         const isCustomer = msg.sender === 'customer';
                         const isSystem = msg.sender === 'system' || msg.isSystemNotice;
 

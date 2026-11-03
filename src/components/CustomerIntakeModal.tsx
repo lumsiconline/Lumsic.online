@@ -46,9 +46,10 @@ export const CustomerIntakeModal: React.FC<CustomerIntakeModalProps> = ({
   isFirstTimeUser
 }) => {
   const savedName = existingName || (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_name') || localStorage.getItem('astral_customer_name')) : '') || '';
+  const savedPhone = (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_phone') || localStorage.getItem('astral_customer_phone')) : '') || '';
 
   // 5 sequential steps:
-  // 1: Name (auto-skipped if already known)
+  // 1: Name & Phone (auto-skipped if already known)
   // 2: Gender
   // 3: Date of Birth
   // 4: Birth Time
@@ -59,6 +60,7 @@ export const CustomerIntakeModal: React.FC<CustomerIntakeModalProps> = ({
 
   // Form Fields
   const [name, setName] = useState<string>(savedName);
+  const [phone, setPhone] = useState<string>(savedPhone);
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Female');
   
   // Date of Birth fields
@@ -114,10 +116,18 @@ export const CustomerIntakeModal: React.FC<CustomerIntakeModalProps> = ({
       ? undefined
       : `${String(birthHour).padStart(2, '0')}:${String(birthMinute).padStart(2, '0')}`;
 
+    if (phone.trim()) {
+      try {
+        localStorage.setItem('lumysic_user_phone', phone.trim());
+        localStorage.setItem('astral_customer_phone', phone.trim());
+      } catch {}
+    }
+
     const startData: ConsultationStartData = {
       firstName: name.trim(),
       fullName: name.trim(),
       gender,
+      phone: phone.trim() || undefined,
       topic: 'Love, Career & Life Guidance',
       readingType: reader.specialties?.[0] || (reader.category === 'Tarot' ? 'Tarot' : 'Psychic'),
       question: `Hello ${reader.name}, I am looking for intuitive guidance on my path.`,
@@ -278,18 +288,39 @@ export const CustomerIntakeModal: React.FC<CustomerIntakeModalProps> = ({
                 </p>
               </div>
 
-              <div>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your full name"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && name.trim()) handleNext();
-                  }}
-                  className="w-full bg-white text-gray-950 px-5 py-4 rounded-2xl border border-white/20 focus:outline-none focus:ring-4 focus:ring-purple-400 font-semibold text-base shadow-xl placeholder:text-gray-400 transition-all"
-                />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-purple-200/90 mb-1.5 uppercase tracking-wider">
+                    Full Name <span className="text-amber-300">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your full name"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && name.trim()) handleNext();
+                    }}
+                    className="w-full bg-white text-gray-950 px-5 py-3.5 rounded-2xl border border-white/20 focus:outline-none focus:ring-4 focus:ring-purple-400 font-semibold text-base shadow-xl placeholder:text-gray-400 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-purple-200/90 mb-1.5 uppercase tracking-wider">
+                    Mobile Number (To Access Chat History)
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +91 9876543210"
+                    className="w-full bg-white/95 text-gray-950 px-5 py-3 rounded-2xl border border-white/20 focus:outline-none focus:ring-4 focus:ring-purple-400 font-semibold text-sm shadow-xl placeholder:text-gray-400 transition-all font-mono"
+                  />
+                  <p className="text-[11px] text-purple-200/80 mt-1">
+                    📱 Log in with this number later to view your full chat history in the 3-line menu.
+                  </p>
+                </div>
               </div>
 
               <div className="pt-2 space-y-2.5">

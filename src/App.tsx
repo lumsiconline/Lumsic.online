@@ -41,6 +41,7 @@ import { RedeemGiftCardModal } from './components/RedeemGiftCardModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { ViewAllReadersPage } from './components/ViewAllReadersPage';
 import { AstralStoreWhiteView } from './components/AstralStoreWhiteView';
+import { UserChatHistoryModal } from './components/UserChatHistoryModal';
 import { LegalPolicyPage, PolicyPageId } from './components/LegalPolicyPage';
 import { detectUserGeo, CountryInfo } from './utils/currency';
 import { Reader, ConsultationSession, CustomerProfile, ConsultationStartData, ChatMessage } from './types';
@@ -51,6 +52,7 @@ import {
   appendMessageToStoredSession, 
   broadcastSessionEvent, 
   createResilientSession, 
+  deduplicateMessages,
   SESSIONS_CHANNEL_NAME 
 } from './utils/sessionSync';
 import { db } from './lib/firebase';
@@ -97,6 +99,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authRedirectTarget, setAuthRedirectTarget] = useState<AuthRedirectTarget | null>(null);
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
+  const [isChatHistoryOpen, setIsChatHistoryOpen] = useState(false);
   const [activePolicyPage, setActivePolicyPage] = useState<PolicyPageId | null>(null);
   const [isShopOpen, setIsShopOpen] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -697,8 +700,16 @@ export default function App() {
       : (startData?.birthDetails?.birthTime ? `${startData.birthDetails.birthTime} ${startData.birthDetails.amPm || ''}`.trim() : 'Not specified');
     const userPob = startData?.birthDetails?.placeOfBirth || 'Not specified';
 
+    const userPhone = startData?.phone || customer.phone || localStorage.getItem('lumysic_user_phone') || localStorage.getItem('astral_customer_phone') || '';
+    const userEmail = customer.email || localStorage.getItem('lumysic_user_email') || localStorage.getItem('astral_customer_email') || '';
+
     // 1. Create robust standardized session locally first for 0ms lag
-    const resilientSession = createResilientSession(targetReader, startData, { id: customerId, name: userName });
+    const resilientSession = createResilientSession(targetReader, startData, { 
+      id: customerId, 
+      name: userName, 
+      phone: userPhone, 
+      email: userEmail 
+    });
 
     // 2. Persist locally and broadcast immediately across tabs (Astrologer & Admin dashboards receive it instantly!)
     saveStoredSession(resilientSession);
@@ -724,6 +735,8 @@ export default function App() {
           customerId,
           firstName: userName,
           customerName: userName,
+          customerPhone: userPhone || undefined,
+          customerEmail: userEmail || undefined,
           readingType: startData?.readingType || targetReader.category || 'Live Consultation',
           topic: startData?.topic || 'Love, Career & Life Guidance',
           initialQuestion: startData?.question || `Hello ${targetReader.name}, I am connecting with you for guidance today.`,
@@ -758,23 +771,37 @@ export default function App() {
     }
   };
   
-  const handleSendMessage = async (text: string) => {
-    if (!activeSession || !text.trim()) return null;
+  const handleSendMessage = async (msgOrText: ChatMessage | string) => {
+    if (!activeSession) return null;
+
+    let userMsg: ChatMessage;
+    if (typeof msgOrText === 'object' && msgOrText && msgOrText.id) {
+      userMsg = msgOrText;
+    } else {
+      const text = typeof msgOrText === 'string' ? msgOrText.trim() : '';
+      if (!text) return null;
+      userMsg = {
+        id: 'msg_u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        sessionId: activeSession.id,
+        sender: 'customer',
+        senderName: activeSession.customerName || 'Seeker',
+        text,
+        timestamp: new Date().toISOString()
+      };
+    }
 
     const sessionId = activeSession.id;
-    const userMsg: ChatMessage = {
-      id: 'msg_u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      sessionId,
-      sender: 'customer',
-      senderName: activeSession.customerName,
-      text: text.trim(),
-      timestamp: new Date().toISOString()
-    };
 
-    // 1. Immediately append to active state for zero-latency UI
+    // 1. Immediately append to active state for zero-latency UI with deduplication
     setActiveSession(prev => {
       if (!prev) return null;
-      return { ...prev, messages: [...(prev.messages || []), userMsg] };
+      const combined = deduplicateMessages([...(prev.messages || []), userMsg]);
+      return { 
+        ...prev, 
+        messages: combined,
+        lastMessageText: userMsg.text,
+        lastMessageAt: userMsg.timestamp
+      };
     });
 
     // 2. Append to local storage and broadcast to Astrologer & Admin tabs
@@ -784,10 +811,11 @@ export default function App() {
     // 3. Write directly to Firestore for zero-latency cross-platform message delivery
     try {
       const sessionRef = doc(db, 'sessions', sessionId);
+      const combined = deduplicateMessages([...(activeSession.messages || []), userMsg]);
       await setDoc(sessionRef, {
-        messages: [...(activeSession.messages || []), userMsg],
-        lastMessageText: text.trim(),
-        lastMessageAt: new Date().toISOString(),
+        messages: combined,
+        lastMessageText: userMsg.text,
+        lastMessageAt: userMsg.timestamp,
         unreadForOperator: true
       }, { merge: true });
     } catch (fsErr) {
@@ -805,14 +833,15 @@ export default function App() {
         },
         body: JSON.stringify({
           sender: 'customer',
-          senderName: activeSession.customerName,
-          text: text.trim()
+          senderName: userMsg.senderName || activeSession.customerName,
+          text: userMsg.text,
+          messageId: userMsg.id
         })
       });
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        if (data && data.session) {
-          setActiveSession(prev => prev && prev.id === sessionId ? data.session : prev);
+        if (data && data.session && Array.isArray(data.session.messages)) {
+          setActiveSession(prev => prev && prev.id === sessionId ? { ...data.session, messages: deduplicateMessages(data.session.messages) } : prev);
         }
       }
     } catch (err) {
@@ -1075,8 +1104,14 @@ export default function App() {
           onTopUp={async (minutes: number) => {
             setActiveSession(prev => prev ? ({
               ...prev,
-              freeSecondsRemaining: prev.freeSecondsRemaining + minutes * 60
+              freeSecondsRemaining: (prev.freeSecondsRemaining || 0) + minutes * 60,
+              paidSeconds: (prev.paidSeconds || 0) + minutes * 60
             }) : null);
+          }}
+          currentCurrency={currentCurrency}
+          onOpenWallet={() => {
+            setWalletInitialTab('wallet');
+            setIsWalletOpen(true);
           }}
         />
       )}
@@ -1126,6 +1161,7 @@ export default function App() {
           setWalletInitialTab('order');
           setIsWalletOpen(true);
         }}
+        onOpenChatHistory={() => setIsChatHistoryOpen(true)}
         onOpenSupport={() => setIsSupportOpen(true)}
         onOpenRedeem={() => setIsRedeemOpen(true)}
         onOpenSettings={() => setIsDashboardOpen(true)}
@@ -1279,6 +1315,23 @@ export default function App() {
           localStorage.setItem('astral_customer_phone', phone);
           localStorage.setItem('lumysic_user_phone', phone);
           setCustomer(prev => ({ ...prev, name, phone }));
+        }}
+      />
+
+      {/* USER CHAT HISTORY MODAL (ACCESSIBLE FROM 3-LINE DRAWER AFTER LOGIN) */}
+      <UserChatHistoryModal
+        isOpen={isChatHistoryOpen}
+        onClose={() => setIsChatHistoryOpen(false)}
+        isAuthenticated={isAuthenticated}
+        user={customer}
+        onOpenLogin={() => {
+          setIsChatHistoryOpen(false);
+          setIsAuthModalOpen(true);
+        }}
+        onOpenSession={(session) => {
+          setIsChatHistoryOpen(false);
+          setActiveSession(session);
+          setIsChatOpen(true);
         }}
       />
 

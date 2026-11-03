@@ -5,6 +5,7 @@ import {
   saveStoredSession, 
   appendMessageToStoredSession, 
   broadcastSessionEvent, 
+  deduplicateMessages,
   SESSIONS_CHANNEL_NAME 
 } from '../utils/sessionSync';
 import { db } from '../lib/firebase';
@@ -23,16 +24,21 @@ import {
   Award,
   AlertCircle,
   RefreshCw,
-  MessageCircle
+  MessageCircle,
+  CreditCard,
+  Lock,
+  Zap
 } from 'lucide-react';
 
 interface LiveChatViewProps {
   session: ConsultationSession;
   reader: Reader;
-  onSendMessage: (text: string) => Promise<ChatMessage | undefined | null | void> | void;
+  onSendMessage: (textOrMsg: string | ChatMessage) => Promise<ChatMessage | undefined | null | void> | void;
   onCloseChat: () => void;
   onEndConsultation: () => void;
   onTopUp?: (minutes: number) => void;
+  currentCurrency?: string;
+  onOpenWallet?: () => void;
 }
 
 const QUICK_INQUIRIES = [
@@ -49,10 +55,13 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   reader,
   onSendMessage,
   onCloseChat,
-  onEndConsultation
+  onEndConsultation,
+  onTopUp,
+  currentCurrency = 'INR',
+  onOpenWallet
 }) => {
   const [session, setSession] = useState<ConsultationSession>(initialSession);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialSession.messages || []);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => deduplicateMessages(initialSession.messages || []));
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showBirthDetails, setShowBirthDetails] = useState(false);
@@ -79,8 +88,23 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [now, setNow] = useState(Date.now());
 
+  // Additional purchased / recharged seconds (e.g., when user tops up 5, 10, or 20 minutes)
+  const [extraPaidSeconds, setExtraPaidSeconds] = useState<number>(initialSession.paidSeconds || 0);
+
+  // Recharge popup state
+  const [showRechargePopup, setShowRechargePopup] = useState(false);
+  const [isRecharging, setIsRecharging] = useState(false);
+  const hasTriggeredExpiredPopupRef = useRef(false);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const lastMessageCountRef = useRef(messages.length);
+
+  // Sync extraPaidSeconds if session.paidSeconds increases from outside
+  useEffect(() => {
+    if (session?.paidSeconds && session.paidSeconds > extraPaidSeconds) {
+      setExtraPaidSeconds(session.paidSeconds);
+    }
+  }, [session?.paidSeconds]);
 
   // =========================================================================
   // MOBILE SCREEN FIT (WHATSAPP-STYLE): Lock body & Track Visual Viewport
@@ -175,20 +199,20 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
 
   const hasAstrologerReplied = Boolean(firstAstrologerMessage);
 
-  // 3-Minute Free Chat Countdown Timer (180 seconds)
+  // 3-Minute Free Chat Countdown Timer (180 seconds + any recharged bonus seconds)
   // Back counting starts ONLY when astrologer attends and sends 1st message!
   const countdownSecondsRemaining = useMemo(() => {
-    const TOTAL_FREE_SECONDS = 180; // 3 minutes free chat
+    const TOTAL_SECONDS = 180 + extraPaidSeconds;
 
     // If astrologer has not sent their 1st message yet, timer stays at 03:00 (180s)
     if (!firstAstrologerMessage?.timestamp) {
-      return TOTAL_FREE_SECONDS;
+      return TOTAL_SECONDS;
     }
 
     const replyTime = new Date(firstAstrologerMessage.timestamp).getTime();
     const elapsedSeconds = Math.max(0, Math.floor((now - replyTime) / 1000));
-    return Math.max(0, TOTAL_FREE_SECONDS - elapsedSeconds);
-  }, [now, firstAstrologerMessage]);
+    return Math.max(0, TOTAL_SECONDS - elapsedSeconds);
+  }, [now, firstAstrologerMessage, extraPaidSeconds]);
 
   // Formatted countdown: "03:00", "02:59", etc.
   const formattedCountdown = useMemo(() => {
@@ -199,8 +223,100 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
 
   const isFreeTimeExpired = hasAstrologerReplied && countdownSecondsRemaining === 0;
 
+  // Auto-trigger Recharge popup as soon as the 3 minutes finish!
+  useEffect(() => {
+    if (isFreeTimeExpired && !hasTriggeredExpiredPopupRef.current) {
+      hasTriggeredExpiredPopupRef.current = true;
+      setShowRechargePopup(true);
+    } else if (!isFreeTimeExpired && countdownSecondsRemaining > 0) {
+      hasTriggeredExpiredPopupRef.current = false;
+    }
+  }, [isFreeTimeExpired, countdownSecondsRemaining]);
+
+  // Currency symbol & rate helper
+  const currencySymbol = useMemo(() => {
+    if (currentCurrency === 'USD') return '$';
+    if (currentCurrency === 'GBP') return '£';
+    if (currentCurrency === 'EUR') return '€';
+    if (currentCurrency === 'AED') return 'AED ';
+    if (currentCurrency === 'CAD') return 'CA$';
+    if (currentCurrency === 'AUD') return 'AU$';
+    return '₹';
+  }, [currentCurrency]);
+
+  const rechargePacks = useMemo(() => {
+    if (currentCurrency === 'USD') {
+      return [
+        { minutes: 5, price: 2.99, tag: 'Quick Refill' },
+        { minutes: 10, price: 4.99, tag: 'Most Popular', popular: true },
+        { minutes: 20, price: 8.99, tag: 'Best Value' }
+      ];
+    }
+    if (currentCurrency === 'GBP') {
+      return [
+        { minutes: 5, price: 2.49, tag: 'Quick Refill' },
+        { minutes: 10, price: 3.99, tag: 'Most Popular', popular: true },
+        { minutes: 20, price: 6.99, tag: 'Best Value' }
+      ];
+    }
+    return [
+      { minutes: 5, price: 99, tag: 'Quick Refill' },
+      { minutes: 10, price: 179, tag: 'Most Popular', popular: true },
+      { minutes: 20, price: 299, tag: 'Best Value' }
+    ];
+  }, [currentCurrency]);
+
+  // Handle Instant Recharge & Continue
+  const handleQuickRecharge = async (packMinutes: number) => {
+    setIsRecharging(true);
+    const addedSeconds = packMinutes * 60;
+    const newPaidTotal = extraPaidSeconds + addedSeconds;
+    setExtraPaidSeconds(newPaidTotal);
+    setShowRechargePopup(false);
+
+    try {
+      if (onTopUp) {
+        onTopUp(packMinutes);
+      }
+    } catch {}
+
+    const rechargeNotice: ChatMessage = {
+      id: 'sys_rec_' + Date.now(),
+      sessionId: session.id,
+      sender: 'system',
+      senderName: 'LUMSIC Sanctuary',
+      text: `✨ Recharged successfully! Added ${packMinutes} minutes of live consultation time. Chat resumed.`,
+      timestamp: new Date().toISOString(),
+      isSystemNotice: true
+    };
+
+    const updatedSession: ConsultationSession = {
+      ...session,
+      paidSeconds: newPaidTotal,
+      messages: deduplicateMessages([...(session.messages || []), rechargeNotice])
+    };
+
+    setSession(updatedSession);
+    setMessages(prev => deduplicateMessages([...prev, rechargeNotice]));
+    saveStoredSession(updatedSession);
+    broadcastSessionEvent('message_received', rechargeNotice);
+
+    try {
+      await setDoc(doc(db, 'sessions', session.id), {
+        paidSeconds: newPaidTotal,
+        messages: updatedSession.messages,
+        lastMessageText: rechargeNotice.text,
+        lastMessageAt: rechargeNotice.timestamp
+      }, { merge: true });
+    } catch (err) {
+      console.warn('Recharge Firestore sync notice:', err);
+    } finally {
+      setIsRecharging(false);
+    }
+  };
+
   // =========================================================================
-  // REAL-TIME FIRESTORE & SERVER CONNECTIVITY
+  // REAL-TIME FIRESTORE & SERVER CONNECTIVITY (WITH DEDUPLICATION)
   // =========================================================================
   useEffect(() => {
     if (!session?.id) return;
@@ -213,9 +329,9 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           const remote = docSnap.data() as ConsultationSession;
           if (remote && remote.id === session.id) {
             setSession(curr => ({ ...curr, ...remote }));
-            if (remote.messages && remote.messages.length > lastMessageCountRef.current) {
+            if (remote.messages && remote.messages.length > 0) {
+              setMessages(prev => deduplicateMessages(remote.messages));
               lastMessageCountRef.current = remote.messages.length;
-              setMessages(remote.messages);
             }
           }
         }
@@ -236,14 +352,10 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           if (type === 'message_received' && payload) {
             const msg: ChatMessage = payload;
             if (msg.sessionId === session.id) {
-              // Astrologer message arrived -> stop typing indicator immediately
               if (msg.sender === 'astrologer') {
                 setIsAstrologerTyping(false);
               }
-              setMessages(prev => {
-                if (prev.some(m => m.id === msg.id)) return prev;
-                return [...prev, msg];
-              });
+              setMessages(prev => deduplicateMessages([...prev, msg]));
             }
           } else if (type === 'typing' && payload && payload.sessionId === session.id) {
             if (payload.sender === 'astrologer') {
@@ -273,9 +385,9 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           const data = await res.json().catch(() => null);
           if (data?.session) {
             setSession(curr => ({ ...curr, ...data.session }));
-            if (Array.isArray(data.session.messages) && data.session.messages.length > lastMessageCountRef.current) {
+            if (Array.isArray(data.session.messages) && data.session.messages.length > 0) {
+              setMessages(prev => deduplicateMessages(data.session.messages));
               lastMessageCountRef.current = data.session.messages.length;
-              setMessages(data.session.messages);
             }
           }
         }
@@ -309,6 +421,12 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
   // MESSAGE SENDING: Instantaneous Local + Firestore + Backend Dispatch
   // =========================================================================
   const handleSend = async (textToSend?: string) => {
+    // If 3-minute free consultation expired and user hasn't recharged, DO NOT SEND!
+    if (isFreeTimeExpired) {
+      setShowRechargePopup(true);
+      return;
+    }
+
     const rawText = textToSend || inputText;
     if (!rawText.trim() || isSending) return;
 
@@ -325,8 +443,8 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       timestamp: new Date().toISOString()
     };
 
-    // 1. Immediate optimistic UI render
-    setMessages(prev => [...prev, newMsg]);
+    // 1. Immediate optimistic UI render with deduplication
+    setMessages(prev => deduplicateMessages([...prev, newMsg]));
     lastMessageCountRef.current += 1;
 
     // 2. Persist to local storage and broadcast to Admin tabs
@@ -337,7 +455,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
     try {
       const sessionRef = doc(db, 'sessions', session.id);
       await setDoc(sessionRef, {
-        messages: [...(session.messages || []), newMsg],
+        messages: deduplicateMessages([...(session.messages || []), newMsg]),
         lastMessageText: cleanText,
         lastMessageAt: newMsg.timestamp,
         unreadForOperator: true
@@ -346,9 +464,9 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       console.warn('Firestore message dispatch notice:', fsErr);
     }
 
-    // 4. Dispatch to backend API
+    // 4. Dispatch to backend API (pass exact newMsg to prevent duplicates)
     try {
-      await onSendMessage(cleanText);
+      await onSendMessage(newMsg as any);
     } catch (err) {
       console.warn('Backend message error:', err);
     } finally {
@@ -615,8 +733,8 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           </div>
         )}
 
-        {/* Message Bubbles */}
-        {messages.map((msg, index) => {
+        {/* Message Bubbles (Guaranteed Zero Duplicates) */}
+        {deduplicateMessages(messages || []).map((msg, index) => {
           const isCustomer = msg.sender === 'customer';
           const isSystem = msg.sender === 'system' || msg.isSystemNotice;
 
@@ -713,7 +831,7 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       {/* =================================================================== */}
       {/* 4. QUICK INQUIRY SUGGESTIONS CHIPS */}
       {/* =================================================================== */}
-      {!isCompleted && messages.length <= 4 && (
+      {!isCompleted && !isFreeTimeExpired && messages.length <= 4 && (
         <div className="px-3.5 py-2 bg-purple-50/70 border-t border-purple-100 flex items-center gap-1.5 overflow-x-auto shrink-0">
           <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider shrink-0">Suggestions:</span>
           {QUICK_INQUIRIES.map((inquiry, idx) => (
@@ -730,25 +848,47 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
       )}
 
       {/* =================================================================== */}
-      {/* 5. WHITE COMPOSER BAR & PURPLE ACTION BUTTON */}
+      {/* 5. COMPOSER BAR & LOCK ON TIME EXPIRATION */}
       {/* =================================================================== */}
       {!isCompleted ? (
         <div className="p-3 bg-white border-t border-purple-100 shrink-0 sticky bottom-0 z-30 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           
-          {/* Quick Symbol bar */}
-          <div className="flex items-center gap-1 mb-2 px-1">
-            <span className="text-[10px] text-gray-500 font-medium mr-1">Symbols:</span>
-            {CELESTIAL_SYMBOLS.map((sym, i) => (
+          {/* Time Expired Notice Banner & Recharge Prompt */}
+          {isFreeTimeExpired && (
+            <div className="mb-2.5 p-3 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-500/15 to-indigo-500/15 border border-amber-400/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-pulse">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="text-xs font-bold text-purple-950">
+                  3-Minute Free Consultation Ended. Recharge to continue chatting with {astrologerName}.
+                </span>
+              </div>
               <button
-                key={i}
                 type="button"
-                onClick={() => setInputText(prev => prev + sym)}
-                className="p-1 hover:bg-purple-50 rounded-lg text-xs transition cursor-pointer"
+                onClick={() => setShowRechargePopup(true)}
+                className="px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black shadow-md cursor-pointer shrink-0 transition flex items-center justify-center gap-1.5"
               >
-                {sym}
+                <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Recharge & Continue</span>
               </button>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {/* Quick Symbol bar (Only when active and time remaining) */}
+          {!isFreeTimeExpired && (
+            <div className="flex items-center gap-1 mb-2 px-1">
+              <span className="text-[10px] text-gray-500 font-medium mr-1">Symbols:</span>
+              {CELESTIAL_SYMBOLS.map((sym, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setInputText(prev => prev + sym)}
+                  className="p-1 hover:bg-purple-50 rounded-lg text-xs transition cursor-pointer"
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+          )}
 
           <form
             onSubmit={(e) => {
@@ -759,28 +899,43 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
           >
             <input
               type="text"
-              placeholder={`Type your message for ${astrologerName}...`}
+              placeholder={
+                isFreeTimeExpired
+                  ? `3-Minute free chat ended. Please recharge to continue...`
+                  : `Type your message for ${astrologerName}...`
+              }
               value={inputText}
               onChange={e => setInputText(e.target.value)}
               onFocus={handleInputFocus}
+              disabled={isFreeTimeExpired || isSending}
               enterKeyHint="send"
               autoComplete="off"
-              className="flex-1 bg-gray-50 border border-purple-200 text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-400 rounded-full px-4 py-2.5 text-sm transition"
-              autoFocus
+              className={`flex-1 border rounded-full px-4 py-2.5 text-sm transition ${
+                isFreeTimeExpired
+                  ? 'bg-amber-50/70 border-amber-300 text-gray-600 placeholder-amber-800/60 cursor-not-allowed opacity-90'
+                  : 'bg-gray-50 border-purple-200 text-gray-900 placeholder-gray-400 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-400'
+              }`}
+              autoFocus={!isFreeTimeExpired}
             />
 
             <button
               type="submit"
-              disabled={!inputText.trim() || isSending}
-              className="px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white font-bold text-sm transition flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer shrink-0"
+              disabled={!inputText.trim() || isSending || isFreeTimeExpired}
+              className={`px-5 py-2.5 rounded-full font-bold text-sm transition flex items-center gap-1.5 shadow-md shrink-0 ${
+                isFreeTimeExpired
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-purple-600/20 cursor-pointer'
+              }`}
             >
-              <span>Send</span>
-              <Send className="w-3.5 h-3.5" />
+              {isFreeTimeExpired ? <Lock className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+              <span>{isFreeTimeExpired ? 'Locked' : 'Send'}</span>
             </button>
           </form>
 
           <div className="text-center text-[10px] text-gray-400 mt-1.5">
-            Real-time consultation • All messages are securely routed to verified astrologers
+            {isFreeTimeExpired 
+              ? 'User chat is locked. Please recharge your wallet to resume instant messaging with your astrologer.' 
+              : 'Real-time consultation • All messages are securely routed to verified astrologers'}
           </div>
         </div>
       ) : (
@@ -911,6 +1066,132 @@ export const LiveChatView: React.FC<LiveChatViewProps> = ({
               >
                 Submit Review
               </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* 3-MINUTE FREE CHAT EXPIRED - RECHARGE POPUP MODAL */}
+      {/* =================================================================== */}
+      {showRechargePopup && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white border border-purple-200/90 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+            
+            {/* Top decorative gradient bar */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-purple-600 to-indigo-600"></div>
+
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setShowRechargePopup(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              title="Close modal"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header info */}
+            <div className="text-center pt-2">
+              <div className="relative inline-block mb-3">
+                <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-purple-100 mx-auto shadow-md">
+                  <img 
+                    src={reader.avatar} 
+                    alt={astrologerName} 
+                    className="w-full h-full object-cover" 
+                  />
+                </div>
+                <span className="absolute bottom-0 right-0 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black uppercase tracking-wider border-2 border-white shadow-xs">
+                  Paused
+                </span>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 text-amber-600 font-bold text-xs uppercase tracking-wider">
+                <Clock className="w-4 h-4" />
+                <span>3 Free Minutes Concluded</span>
+              </div>
+
+              <h3 className="text-lg font-bold text-gray-900 mt-1">
+                Continue Consultation with {astrologerName}
+              </h3>
+              
+              <p className="text-xs text-gray-600 mt-1.5 px-2 leading-relaxed">
+                Your 3 free promotional minutes have concluded. Recharge to keep your private cosmic channel open and get in-depth guidance.
+              </p>
+            </div>
+
+            {/* Recharge Options Grid */}
+            <div className="mt-5 space-y-2.5">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block px-1">
+                Select Consultation Pack:
+              </span>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {rechargePacks.map((pack) => (
+                  <button
+                    key={pack.minutes}
+                    type="button"
+                    onClick={() => handleQuickRecharge(pack.minutes)}
+                    disabled={isRecharging}
+                    className={`relative p-3 rounded-2xl border text-center transition flex flex-col items-center justify-center cursor-pointer ${
+                      pack.popular
+                        ? 'border-purple-600 bg-purple-50/80 ring-2 ring-purple-500/20 shadow-sm'
+                        : 'border-gray-200 bg-gray-50/70 hover:bg-purple-50/50 hover:border-purple-300'
+                    }`}
+                  >
+                    {pack.popular && (
+                      <span className="absolute -top-2.5 px-2 py-0.2 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-bold uppercase tracking-wider shadow-xs">
+                        Popular
+                      </span>
+                    )}
+
+                    <span className="text-base font-black text-gray-900">
+                      +{pack.minutes}m
+                    </span>
+                    <span className="text-xs font-bold text-purple-700 mt-0.5">
+                      {currencySymbol}{pack.price}
+                    </span>
+                    <span className="text-[9px] text-gray-500 mt-1">
+                      {pack.tag}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Primary Action Button */}
+            <div className="mt-5 space-y-2">
+              <button
+                type="button"
+                onClick={() => handleQuickRecharge(10)}
+                disabled={isRecharging}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 cursor-pointer disabled:opacity-50"
+              >
+                <Zap className="w-4 h-4 fill-slate-950" />
+                <span>Instant Top-Up 10 Mins ({currencySymbol}{rechargePacks[1]?.price || 179})</span>
+              </button>
+
+              {onOpenWallet && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRechargePopup(false);
+                    onOpenWallet();
+                  }}
+                  className="w-full py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-purple-900 font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Open Full Wallet & Payment Options</span>
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 text-center">
+              <span className="text-[10px] text-gray-400">
+                🔒 Safe & encrypted checkout • Instant chat restoration
+              </span>
             </div>
 
           </div>

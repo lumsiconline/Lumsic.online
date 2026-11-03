@@ -4569,6 +4569,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
   const { 
     customerId, 
     customerName, 
+    customerPhone,
+    customerEmail,
     firstName,
     readingType, 
     topic, 
@@ -4598,6 +4600,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     cust = {
       id: effectiveCustomerId,
       name: effectiveName,
+      phone: customerPhone || undefined,
+      email: customerEmail || undefined,
       birthDetails,
       isFirstTimeUser: true,
       freeMinutesUsed: false,
@@ -4607,6 +4611,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
   } else {
     if (effectiveName) cust.name = effectiveName;
     if (birthDetails) cust.birthDetails = birthDetails;
+    if (customerPhone) cust.phone = customerPhone;
+    if (customerEmail) cust.email = customerEmail;
   }
 
   const isEligibleForFree = !cust.freeMinutesUsed;
@@ -4663,6 +4669,8 @@ app.post('/api/sessions/create', async (req: Request, res: Response) => {
     sessionToken,
     customerId: cust.id,
     customerName: cust.name,
+    customerPhone: customerPhone || cust.phone || undefined,
+    customerEmail: customerEmail || cust.email || undefined,
     readingType: readingType || 'General Consultation',
     topic: topic || 'Guidance',
     initialQuestion: initialQuestion ? initialQuestion.trim() : undefined,
@@ -4714,6 +4722,49 @@ app.get('/api/sessions/:id', (req: Request, res: Response) => {
   }
 
   res.json({ session });
+});
+
+// API: Customer Chat History (retrieved by authenticated phone or customerId)
+app.get('/api/user/chat-history', (req: Request, res: Response) => {
+  const rawPhone = (req.query.phone as string || '').trim();
+  const phoneDigits = rawPhone.replace(/\D/g, '');
+  const customerId = (req.query.customerId as string || '').trim();
+  const email = (req.query.email as string || '').toLowerCase().trim();
+
+  if (!phoneDigits && !customerId && !email) {
+    return res.status(400).json({ error: 'Please provide phone number or customer credentials to access chat history' });
+  }
+
+  const allSessions: any[] = Object.values(db.sessions || {});
+  const matched = allSessions.filter((s: any) => {
+    if (!s || !s.id) return false;
+
+    // 1. Phone number match (comparing trailing 10 digits or exact digits)
+    if (phoneDigits && s.customerPhone) {
+      const sessDigits = s.customerPhone.replace(/\D/g, '');
+      if (sessDigits) {
+        if (sessDigits === phoneDigits) return true;
+        if (phoneDigits.length >= 7 && (sessDigits.endsWith(phoneDigits) || phoneDigits.endsWith(sessDigits))) return true;
+        const last10A = phoneDigits.slice(-10);
+        const last10B = sessDigits.slice(-10);
+        if (last10A.length >= 7 && last10A === last10B) return true;
+      }
+    }
+
+    // 2. Customer ID match
+    if (customerId && s.customerId === customerId) {
+      return true;
+    }
+
+    // 3. Email match
+    if (email && s.customerEmail && s.customerEmail.toLowerCase() === email) {
+      return true;
+    }
+
+    return false;
+  }).sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+  res.json({ sessions: matched });
 });
 
 // API: Check user free chat eligibility (Strict server-side source of truth)
@@ -5503,8 +5554,20 @@ app.post('/api/sessions/:id/message', async (req: Request, res: Response) => {
     }
   }
 
+  const incomingId = req.body.messageId;
+  const existingDup = session.messages.find(m => 
+    (incomingId && m.id === incomingId) ||
+    (m.sender === (sender === 'astrologer' ? 'astrologer' : 'customer') &&
+     m.text.trim().toLowerCase() === cleanText.toLowerCase() &&
+     Math.abs(Date.now() - new Date(m.timestamp || 0).getTime()) < 5000)
+  );
+
+  if (existingDup) {
+    return res.json({ success: true, message: existingDup, aiReply: null, session, deduplicated: true });
+  }
+
   const message: ChatMessage = {
-    id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    id: incomingId || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
     sessionId: session.id,
     sender: sender === 'astrologer' ? 'astrologer' : 'customer',
     senderName: senderName || (sender === 'astrologer' ? (session.requestedReaderName || session.assignedReaderName) : session.customerName),

@@ -39,7 +39,38 @@ export function saveStoredSession(session: ConsultationSession): ConsultationSes
   }
 }
 
-// Append a message to a stored session
+// Robust message deduplication helper by ID, and by identical text + sender within 5 seconds
+export function deduplicateMessages(messages: ChatMessage[]): ChatMessage[] {
+  if (!messages || !Array.isArray(messages) || messages.length === 0) return [];
+  const seenIds = new Set<string>();
+  const result: ChatMessage[] = [];
+
+  for (const msg of messages) {
+    if (!msg || typeof msg.text !== 'string') continue;
+    const cleanId = msg.id ? String(msg.id) : '';
+    if (cleanId && seenIds.has(cleanId)) continue;
+
+    const trimmedText = msg.text.trim().toLowerCase();
+    const msgTime = new Date(msg.timestamp || 0).getTime();
+
+    // Check if duplicate of an existing message with identical sender, text, and proximate timestamp
+    const isDuplicate = result.some(prev => {
+      if (prev.sender !== msg.sender) return false;
+      if (prev.text.trim().toLowerCase() !== trimmedText) return false;
+      const prevTime = new Date(prev.timestamp || 0).getTime();
+      return Math.abs(msgTime - prevTime) < 5000;
+    });
+
+    if (isDuplicate) continue;
+
+    if (cleanId) seenIds.add(cleanId);
+    result.push(msg);
+  }
+
+  return result;
+}
+
+// Append a message to a stored session with deduplication
 export function appendMessageToStoredSession(sessionId: string, message: ChatMessage): ConsultationSession | null {
   if (typeof window === 'undefined' || !sessionId || !message) return null;
   try {
@@ -48,10 +79,17 @@ export function appendMessageToStoredSession(sessionId: string, message: ChatMes
     if (existingIndex >= 0) {
       const sess = current[existingIndex];
       const msgs = sess.messages || [];
-      if (!msgs.some(m => m.id === message.id)) {
+      const cleanText = message.text?.trim().toLowerCase();
+      const msgTime = new Date(message.timestamp || 0).getTime();
+      const isDuplicate = msgs.some(m => 
+        m.id === message.id || 
+        (m.sender === message.sender && m.text?.trim().toLowerCase() === cleanText && Math.abs(new Date(m.timestamp || 0).getTime() - msgTime) < 5000)
+      );
+      if (!isDuplicate) {
+        const updatedMsgs = deduplicateMessages([...msgs, message]);
         const updatedSess: ConsultationSession = {
           ...sess,
-          messages: [...msgs, message],
+          messages: updatedMsgs,
           updatedAt: new Date().toISOString()
         };
         current[existingIndex] = updatedSess;
@@ -100,10 +138,12 @@ export function broadcastSessionEvent(type: SessionEventType, data: any) {
 export function createResilientSession(
   reader: Reader,
   startData?: Partial<ConsultationStartData>,
-  customerOverride?: { id?: string; name?: string }
+  customerOverride?: { id?: string; name?: string; phone?: string; email?: string }
 ): ConsultationSession {
   const customerId = customerOverride?.id || (typeof window !== 'undefined' ? localStorage.getItem('astral_customer_id') : '') || ('cust_' + Date.now());
   const userName = startData?.firstName || startData?.fullName || customerOverride?.name || (typeof window !== 'undefined' ? localStorage.getItem('lumysic_user_name') : '') || 'Valued Seeker';
+  const userPhone = startData?.phone || customerOverride?.phone || (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_phone') || localStorage.getItem('astral_customer_phone')) : '') || '';
+  const userEmail = customerOverride?.email || (typeof window !== 'undefined' ? (localStorage.getItem('lumysic_user_email') || localStorage.getItem('astral_customer_email')) : '') || '';
   const userGender = startData?.birthDetails?.gender || startData?.gender || 'Not specified';
   const userDob = startData?.birthDetails?.dob || 'Not specified';
   const userTob = startData?.birthDetails?.unknownTime 
@@ -126,6 +166,8 @@ export function createResilientSession(
     id: sessionId,
     customerId,
     customerName: userName,
+    customerPhone: userPhone.trim() || undefined,
+    customerEmail: userEmail.trim() || undefined,
     requestedReaderId: reader.id,
     requestedReaderName: reader.name,
     requestedAstroId: reader.astroId,

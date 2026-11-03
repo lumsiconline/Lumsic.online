@@ -13,6 +13,7 @@ interface NavigationDrawerProps {
   onOpenWallet: () => void;
   onOpenReferral?: () => void;
   onOpenOrders: () => void;
+  onOpenChatHistory?: () => void;
   onOpenSupport: () => void;
   onOpenRedeem: () => void;
   onOpenSettings: () => void;
@@ -34,6 +35,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenWallet,
   onOpenReferral,
   onOpenOrders,
+  onOpenChatHistory,
   onOpenSupport,
   onOpenRedeem,
   onOpenSettings,
@@ -97,6 +99,17 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         onClose();
         if (onOpenReferral) onOpenReferral();
         else onOpenWallet();
+      }
+    },
+    {
+      id: 'chat_history',
+      label: 'Chat History',
+      badge: !isAuthenticated ? 'Login required' : undefined,
+      icon: MessageSquare,
+      action: () => {
+        onClose();
+        if (onOpenChatHistory) onOpenChatHistory();
+        else if (!isAuthenticated && onOpenLogin) onOpenLogin();
       }
     },
     {
@@ -226,7 +239,14 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-100 to-amber-50 group-hover:from-amber-200 group-hover:to-amber-100 text-[#92400E] border border-amber-200/80 flex items-center justify-center transition-all group-hover:scale-105 shadow-2xs">
                     <Icon className="w-4 h-4 stroke-[2.2]" />
                   </div>
-                  <span className="text-[14.5px] tracking-tight">{item.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[14.5px] tracking-tight">{item.label}</span>
+                    {(item as any).badge && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                        {(item as any).badge}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="w-6 h-6 rounded-full bg-amber-50 group-hover:bg-amber-100/80 flex items-center justify-center border border-amber-200/50">
                   <ChevronRight className="w-3.5 h-3.5 text-[#B45309] transition-transform group-hover:translate-x-0.5" />

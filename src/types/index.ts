@@ -70,6 +70,7 @@ export interface ConsultationStartData {
   firstName: string;
   fullName?: string;
   gender?: string;
+  phone?: string;
   topic: string;
   readingType: string;
   question: string;
@@ -129,6 +130,8 @@ export interface ConsultationSession {
   id: string;
   customerId: string;
   customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
   readingType?: string;
   topic?: string;
   initialQuestion?: string;
