@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, MessageSquare, ShoppingBag, Layers, Compass } from 'lucide-react';
+import { Home, Flame, ShoppingBag, Clock, Headphones } from 'lucide-react';
 
 interface MobileBottomNavProps {
   activeSection: string;
@@ -8,6 +8,8 @@ interface MobileBottomNavProps {
   onGoHome?: () => void;
   onOpenMall?: () => void;
   onOpenRituals?: () => void;
+  onOpenOrders?: () => void;
+  onOpenSupport?: () => void;
   onOpenTarot?: () => void;
   onOpenHoroscope?: () => void;
   onOpenChatroom?: () => void;
@@ -19,9 +21,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onGoHome,
   onOpenMall,
   onOpenRituals,
-  onOpenTarot,
-  onOpenHoroscope,
-  onOpenChatroom
+  onOpenOrders,
+  onOpenSupport
 }) => {
   const handleHomeClick = () => {
     if (onGoHome) {
@@ -31,13 +32,35 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     }
   };
 
+  const handleRemediesClick = () => {
+    if (onOpenRituals) {
+      onOpenRituals();
+    } else {
+      onNavigateSection('rituals');
+    }
+  };
+
   const handleMallClick = () => {
     if (onOpenMall) {
       onOpenMall();
-    } else if (onOpenRituals) {
-      onOpenRituals();
     } else {
       onNavigateSection('shop');
+    }
+  };
+
+  const handleOrdersClick = () => {
+    if (onOpenOrders) {
+      onOpenOrders();
+    } else {
+      onNavigateSection('wallet');
+    }
+  };
+
+  const handleSupportClick = () => {
+    if (onOpenSupport) {
+      onOpenSupport();
+    } else {
+      onNavigateSection('support');
     }
   };
 
@@ -49,10 +72,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       action: handleHomeClick 
     },
     { 
-      id: 'chatroom', 
-      label: 'Chat', 
-      icon: MessageSquare, 
-      action: onOpenChatroom ? onOpenChatroom : () => onNavigateSection('readers') 
+      id: 'rituals', 
+      label: 'Remedies', 
+      icon: Flame, 
+      action: handleRemediesClick 
     },
     { 
       id: 'mall', 
@@ -62,16 +85,16 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       badge: 'New'
     },
     { 
-      id: 'tarot', 
-      label: 'Tarot', 
-      icon: Layers, 
-      action: onOpenTarot ? onOpenTarot : () => onNavigateSection('tarot') 
+      id: 'orders', 
+      label: 'Orders', 
+      icon: Clock, 
+      action: handleOrdersClick 
     },
     { 
-      id: 'horoscope', 
-      label: 'Horoscope', 
-      icon: Compass, 
-      action: onOpenHoroscope ? onOpenHoroscope : () => onNavigateSection('horoscope') 
+      id: 'support', 
+      label: 'Support', 
+      icon: Headphones, 
+      action: handleSupportClick 
     },
   ];
 

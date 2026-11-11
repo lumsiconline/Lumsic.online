@@ -1,5 +1,5 @@
 import { 
-  X, Headphones, Wallet, Clock, Gift, Settings, Edit3, LogOut, ShieldCheck, ChevronRight, Share2, MessageSquare, Compass, ShoppingBag 
+  X, Headphones, Wallet, Clock, Gift, Settings, Edit3, LogOut, ShieldCheck, ChevronRight, Share2, Flame, ShoppingBag 
 } from 'lucide-react';
 import { CustomerProfile } from '../types';
 import { openInNewTab } from '../utils/openNewTab';
@@ -19,6 +19,7 @@ interface NavigationDrawerProps {
   onOpenRedeem: () => void;
   onOpenSettings: () => void;
   onOpenShop?: () => void;
+  onOpenRituals?: () => void;
   onLogout: () => void;
   onOpenFreeChat?: () => void;
   onOpenAdmin?: () => void;
@@ -41,6 +42,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenRedeem,
   onOpenSettings,
   onOpenShop,
+  onOpenRituals,
   onLogout,
   onOpenFreeChat,
   onOpenAdmin,
@@ -66,12 +68,22 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   const menuItems = [
     {
       id: 'shop',
-      label: 'Cosmic Shop & Remedies (New)',
+      label: 'LUMSIC Consecrated Store',
       icon: ShoppingBag,
       action: () => {
         onClose();
         if (onOpenShop) onOpenShop();
         else window.dispatchEvent(new CustomEvent('open_shop_page'));
+      }
+    },
+    {
+      id: 'rituals',
+      label: 'Sacred Remedies & Healings',
+      icon: Flame,
+      action: () => {
+        onClose();
+        if (onOpenRituals) onOpenRituals();
+        else window.location.hash = '#rituals';
       }
     },
     {
@@ -85,7 +97,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     },
     {
       id: 'wallet',
-      label: 'Wallet & Recharge',
+      label: 'Wallet & Account',
       icon: Wallet,
       action: () => {
         onClose();
@@ -93,29 +105,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
       }
     },
     {
-      id: 'referral',
-      label: 'Refer & Earn Free Chat',
-      icon: Share2,
-      action: () => {
-        onClose();
-        if (onOpenReferral) onOpenReferral();
-        else onOpenWallet();
-      }
-    },
-    {
-      id: 'chat_history',
-      label: 'Chat History',
-      badge: !isAuthenticated ? 'Login required' : undefined,
-      icon: MessageSquare,
-      action: () => {
-        onClose();
-        if (onOpenChatHistory) onOpenChatHistory();
-        else if (!isAuthenticated && onOpenLogin) onOpenLogin();
-      }
-    },
-    {
       id: 'orders',
-      label: 'Order History',
+      label: 'Order History & Tracking',
       icon: Clock,
       action: () => {
         onClose();
@@ -151,19 +142,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             onOpenAdmin();
           } else {
             openInNewTab('/admin.html?tab=overview');
-          }
-        }
-      },
-      {
-        id: 'astrologer_dashboard',
-        label: 'Astrologer Dashboard (Workstation)',
-        icon: Compass,
-        action: () => {
-          onClose();
-          if (onOpenAstrologerDashboard) {
-            onOpenAstrologerDashboard();
-          } else {
-            openInNewTab('/admin.html?tab=chats');
           }
         }
       }

@@ -9,25 +9,18 @@ interface SearchItem {
 }
 
 const SEARCH_DATABASE: SearchItem[] = [
-  // Tools
-  { title: 'Birth Chart Calculator', category: 'Tool', description: 'Compute natal wheel, degrees and aspects', sectionId: 'birth-chart' },
-  { title: 'Today’s Horoscope', category: 'Horoscope', description: 'Daily astrological forecasts for all 12 signs', sectionId: 'horoscope' },
-  { title: 'Psychic Sensitivity Test', category: 'Tool', description: 'Evaluate clairsentience and sensory resonance', sectionId: 'psychic' },
-  { title: 'Intuition ESP Test', category: 'Tool', description: 'Interactive real-time symbol resonance test', sectionId: 'psychic' },
-  { title: 'Daily Tarot Reading', category: 'Tarot', description: 'Draw one card or three card reflection spread', sectionId: 'tarot' },
-  { title: 'Zodiac Love Compatibility', category: 'Tool', description: 'Elemental synastry and relationship harmony score', sectionId: 'compatibility' },
-  { title: 'Life Path Number Calculator', category: 'Numerology', description: 'Calculate your core destiny number from birthdate', sectionId: 'numerology' },
-  { title: 'Vedic Janam Kundli', category: 'Birth Charts', description: 'Sidereal chart with 12 Bhavas and Nakshatras', sectionId: 'vedic' },
-  // Topics & Zodiac
-  { title: 'Aries Zodiac Archetype', category: 'Zodiac', description: 'Cardinal Fire · Ruled by Mars', sectionId: 'horoscope' },
-  { title: 'Scorpio Zodiac Archetype', category: 'Zodiac', description: 'Fixed Water · Ruled by Pluto', sectionId: 'horoscope' },
-  { title: 'Saturn Return Guide', category: 'Article', description: 'Understanding structural maturity at age 29.5', sectionId: 'learn' },
-  { title: 'Mercury Retrograde Ephemeris', category: 'Article', description: 'Astronomical phenomenon and reflective practice', sectionId: 'learn' },
-  { title: 'Carl Jung and Tarot Archetypes', category: 'Article', description: 'Major Arcana as psychological mirror', sectionId: 'learn' },
-  // Experts
-  { title: 'Dr. Alistair Thorne', category: 'Expert', description: 'Western Chart Reader · London, UK', sectionId: 'experts' },
-  { title: 'Pandit Rameshwar Joshi', category: 'Expert', description: 'Vedic Jyotish Reader · London, UK', sectionId: 'experts' },
-  { title: 'Genevieve Laurent', category: 'Expert', description: 'Tarot Reader · Paris, France', sectionId: 'experts' },
+  // Sacred Remedies & Pujas
+  { title: 'Sacred Love Binding Ceremony', category: 'Remedy', description: 'Ancient Vedic ritual for lasting soulmate connection', sectionId: 'rituals' },
+  { title: 'Ex & Reunion Healing', category: 'Remedy', description: 'Clearing energetic discord and past emotional cord cutting', sectionId: 'rituals' },
+  { title: '7-Chakra Deep Energy Cleansing', category: 'Healing', description: 'Master pranic purification of all major energy vortexes', sectionId: 'rituals' },
+  { title: 'Road Opener & Wealth Ritual', category: 'Remedy', description: 'Removal of obstacles in career, finance, and enterprise', sectionId: 'rituals' },
+  { title: 'Ancestral Karma & Dosha Shanti', category: 'Healing', description: 'Deep clearing of generational patterns and blockages', sectionId: 'rituals' },
+  // Consecrated Store Offerings
+  { title: 'Consecrated Pyrite Wealth Magnet Ring', category: 'Store', description: 'Blessed natural pyrite gemstone ring for wealth attraction', sectionId: 'shop' },
+  { title: 'Tiger Eye & Lava Stone Grounding Bracelet', category: 'Store', description: 'Protection against evil eye and negative environmental vibrations', sectionId: 'shop' },
+  { title: 'Shree Yantra Pure Copper Plate', category: 'Store', description: 'Sacred sacred geometry energized with 108 Gayatri mantras', sectionId: 'shop' },
+  { title: 'Authentic 5-Mukhi Rudraksha Mala', category: 'Store', description: 'Hand-knotted sacred prayer beads from Himalayan foothills', sectionId: 'shop' },
+  { title: 'Free Selenite Cleansing Plate Gift', category: 'Store', description: 'Natural selenite charging slab included with eligible jewelry', sectionId: 'shop' },
 ];
 
 export const GlobalSearchModal: React.FC<{

@@ -9,22 +9,22 @@ export const OfferBanner: React.FC<OfferBannerProps> = ({ onClaimOffer }) => {
     <div className="flex items-center gap-8 text-[11px] sm:text-xs font-semibold tracking-wide whitespace-nowrap px-4 text-slate-300">
       <span className="inline-flex items-center gap-1.5 text-white font-black">
         <span>✨</span>
-        <span>FIRST CHAT FREE</span>
+        <span>100% VEDIC CONSECRATED REMEDIES</span>
       </span>
       <span className="text-[#F5C542]">•</span>
       <span className="inline-flex items-center gap-1.5 text-slate-100 font-bold">
-        <span>🌎</span>
-        <span>CONNECT WITH VERIFIED READERS &amp; PSYCHICS</span>
+        <span>🌿</span>
+        <span>SACRED DISTANCE HEALING &amp; PUJAS</span>
       </span>
       <span className="text-[#F5C542]">•</span>
       <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
-        <span>🔒</span>
-        <span>PRIVATE &amp; SECURE</span>
+        <span>📦</span>
+        <span>FREE ENERGISED CLEANSING ON ALL ORDERS</span>
       </span>
       <span className="text-[#F5C542]">•</span>
       <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full bg-gradient-to-r from-[#F5C542] via-[#FFD86B] to-[#F5C542] text-[#070B1F] font-black border border-[#F5C542] shadow-xs hover:brightness-110 transition-all">
-        <span>🎁</span>
-        <span>CLAIM FREE CHAT</span>
+        <span>🛍️</span>
+        <span>EXPLORE STORE &amp; REMEDIES</span>
       </span>
       <span className="text-[#F5C542]">•</span>
     </div>

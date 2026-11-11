@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, MessageSquare, Star, Sparkles } from 'lucide-react';
+import { Flame, ShoppingBag, Star } from 'lucide-react';
 import { MysticFannedCardsHero } from './MysticFannedCardsHero';
 
 interface HeroProps {
+  onExploreRemedies?: () => void;
+  onOpenStore?: () => void;
+  onSelectCardRemedy?: (topic?: string) => void;
   onCreateBirthChart?: () => void;
   onFindAstrologer?: () => void;
   onOpenCompatibility?: () => void;
 }
 
 export const Hero: React.FC<HeroProps> = ({
-  onCreateBirthChart,
+  onExploreRemedies,
+  onOpenStore,
+  onSelectCardRemedy,
   onFindAstrologer,
+  onCreateBirthChart,
   onOpenCompatibility
 }) => {
   // Live "Online Now" counter: updates every 2 to 3 seconds, strictly between 456 and 734
@@ -27,10 +33,20 @@ export const Hero: React.FC<HeroProps> = ({
         if (next > 734) next = 734 - Math.floor(Math.random() * 10);
         return next;
       });
-    }, 2500); // Every 2.5 seconds (in the requested 2 to 3 second window)
+    }, 2500); // Every 2.5 seconds
 
     return () => clearInterval(timer);
   }, []);
+
+  const handleRemediesClick = () => {
+    if (onExploreRemedies) onExploreRemedies();
+    else if (onFindAstrologer) onFindAstrologer();
+  };
+
+  const handleStoreClick = () => {
+    if (onOpenStore) onOpenStore();
+    else if (onExploreRemedies) onExploreRemedies();
+  };
 
   return (
     <section id="home" className="relative pt-5 pb-7 sm:pt-9 sm:pb-12 bg-gradient-to-b from-[#060A1C] via-[#09112E] to-[#060918] border-b border-indigo-950/60 overflow-hidden text-white">
@@ -43,13 +59,13 @@ export const Hero: React.FC<HeroProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* Main Grid: Left Typography & Right 3D Fanned Cards + Orb Visual */}
+        {/* Main Grid: Left Typography & Right 3D Fanned Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
           
-          {/* Left Column: Online Pill & Reviews in Upper Side, Headline, Subtitle, CTA Button */}
+          {/* Left Column: Online Pill & Reviews in Upper Side, Headline, Subtitle, CTA Buttons */}
           <div className="lg:col-span-7 space-y-4 sm:space-y-5 text-left">
             
-            {/* 1. UPPER ROW: Online Status Pill + Customer Reviews Rating Badge */}
+            {/* 1. UPPER ROW: Sanctuary Status Pill + Customer Reviews Rating Badge */}
             <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               {/* Online Pill */}
               <div className="inline-flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.1] px-3.5 py-1.5 rounded-full border border-emerald-400/30 shadow-lg backdrop-blur-md transition-all">
@@ -58,12 +74,12 @@ export const Hero: React.FC<HeroProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-500" />
                 </span>
                 <span className="font-semibold text-white tracking-wide text-xs sm:text-sm">
-                  <b className="font-mono text-emerald-400 font-bold text-xs sm:text-sm">{onlineCount}</b> online now
+                  <b className="font-mono text-emerald-400 font-bold text-xs sm:text-sm">{onlineCount}</b> active sanctuary seekers
                 </span>
                 <span className="text-emerald-400/60 font-mono text-xs hidden sm:inline">• Live</span>
               </div>
 
-              {/* Reviews Badge - Fixed in Upper Side */}
+              {/* Reviews Badge */}
               <div className="inline-flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.1] px-3.5 py-1.5 rounded-full border border-amber-400/35 shadow-lg backdrop-blur-md transition-all">
                 <div className="flex text-amber-400">
                   <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-current" />
@@ -77,31 +93,40 @@ export const Hero: React.FC<HeroProps> = ({
               </div>
             </div>
 
-            {/* 2. Elegant Headline with matching font-serif italic style in white and gold */}
+            {/* 2. Elegant Headline with font-serif italic style in white and gold */}
             <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal tracking-tight leading-[1.14] sm:leading-[1.08] font-serif italic">
               <span className="text-white drop-shadow-sm">
-                Clarity for your
+                Sacred Remedies &amp;
               </span>{' '}
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#F6D06E] via-[#FCE38A] to-[#E5B744] drop-shadow-sm">
-                love, career &amp; life.
+                consecrated store.
               </span>
             </h1>
 
-            {/* 3. Subtitle matching screenshot phrasing */}
+            {/* 3. Subtitle focused on Remedies & Consecrated Creations */}
             <p className="text-sm sm:text-base md:text-lg text-slate-300 leading-relaxed font-normal max-w-xl">
-              Talk to trusted psychics and tarot readers 24/7 by chat — and take your next step with confidence.
+              Authentic Vedic healings, consecrated yantras, sacred rituals &amp; energised crystal creations — hand-blessed and delivered to your doorstep.
             </p>
 
-            {/* 4. Action Button: Start Free Chat with Psychics (Yellow/Gold style as earlier) */}
+            {/* 4. Action Buttons: Explore Sacred Remedies + Visit Consecrated Store */}
             <div className="pt-1 sm:pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <button
                 type="button"
-                onClick={onFindAstrologer}
-                className="w-full sm:w-auto px-7 py-3.5 sm:px-9 sm:py-4 rounded-full bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 text-gray-950 font-black text-sm sm:text-base leading-none shadow-xl shadow-amber-500/25 transition-all active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer border border-amber-300"
+                onClick={handleRemediesClick}
+                className="w-full sm:w-auto px-7 py-3.5 sm:px-8 sm:py-4 rounded-full bg-gradient-to-r from-[#F6D06E] via-[#FACC15] to-[#E5B744] hover:brightness-110 text-gray-950 font-black text-sm sm:text-base leading-none shadow-xl shadow-amber-500/25 transition-all active:scale-95 flex items-center justify-center gap-2.5 cursor-pointer border border-amber-300"
               >
-                <MessageSquare className="w-5 h-5 fill-gray-950 shrink-0" />
-                <span className="leading-tight">Start Free Chat with Psychics</span>
+                <Flame className="w-5 h-5 fill-gray-950 shrink-0" />
+                <span className="leading-tight">Explore Sacred Remedies</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStoreClick}
+                className="w-full sm:w-auto px-6 py-3.5 sm:px-7 sm:py-4 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-white font-bold text-sm sm:text-base leading-none border border-white/20 hover:border-amber-400/60 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-md backdrop-blur-md"
+              >
+                <ShoppingBag className="w-4.5 h-4.5 text-[#F6D06E] shrink-0" />
+                <span className="leading-tight">Visit Consecrated Store</span>
               </button>
             </div>
 
@@ -110,10 +135,17 @@ export const Hero: React.FC<HeroProps> = ({
           {/* Right Column: 3D Fanned Cards (Hidden on mobile phone view, visible on tablet and desktop) */}
           <div className="hidden md:flex lg:col-span-5 items-center justify-center relative mt-8 lg:mt-0">
             <MysticFannedCardsHero
-              onOpenBirthChart={onCreateBirthChart}
-              onOpenTarot={onCreateBirthChart}
-              onOpenCompatibility={onOpenCompatibility}
-              onStartReading={onFindAstrologer}
+              onSelectCard={(cardId) => {
+                if (onSelectCardRemedy) onSelectCardRemedy(cardId);
+                else handleRemediesClick();
+              }}
+              onStartReading={(topic) => {
+                if (onSelectCardRemedy) onSelectCardRemedy(topic);
+                else handleRemediesClick();
+              }}
+              onOpenBirthChart={handleRemediesClick}
+              onOpenTarot={handleRemediesClick}
+              onOpenCompatibility={handleRemediesClick}
             />
           </div>
 

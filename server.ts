@@ -2476,8 +2476,22 @@ app.get('/api/geo', (req: Request, res: Response) => {
   const xCountry = (req.headers['x-country-code'] as string) || '';
   const forwardedFor = (req.headers['x-forwarded-for'] as string) || '';
   const clientIp = forwardedFor.split(',')[0].trim() || req.socket.remoteAddress || '';
-  const country = (cfCountry || gcpCountry || xCountry || '').toUpperCase();
+  let country = (cfCountry || gcpCountry || xCountry || '').toUpperCase();
   
+  // If proxy headers did not provide country, check accept-language header as instant fallback
+  if (!country) {
+    const acceptLang = String(req.headers['accept-language'] || '').toLowerCase();
+    if (acceptLang.includes('en-in') || acceptLang.includes('hi-in') || acceptLang.includes('hi') || acceptLang.includes('mr-in') || acceptLang.includes('ta-in') || acceptLang.includes('te-in') || acceptLang.includes('gu-in')) {
+      country = 'IN';
+    } else if (acceptLang.includes('en-gb')) {
+      country = 'GB';
+    } else if (acceptLang.includes('en-ca')) {
+      country = 'CA';
+    } else if (acceptLang.includes('en-au')) {
+      country = 'AU';
+    }
+  }
+
   let currency = 'USD';
   let dialCode = '+1';
   let flag = '🇺🇸';

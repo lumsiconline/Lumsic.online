@@ -1,29 +1,29 @@
 import React from 'react';
-import { ShieldCheck, MessageSquare, Star, Globe } from 'lucide-react';
+import { ShieldCheck, Sparkles, PackageCheck, Globe } from 'lucide-react';
 
 export const TrustBar: React.FC = () => {
   const benefits = [
     {
-      title: 'Verified Readers',
-      subtitle: 'Trusted & carefully screened',
+      title: '100% Consecrated',
+      subtitle: 'Vedic energised & cleansed',
       icon: ShieldCheck,
       iconColor: '#7C5CFF'
     },
     {
-      title: 'Private & Secure',
-      subtitle: 'Your conversations stay confidential',
-      icon: MessageSquare,
+      title: 'Sacred Healing & Pujas',
+      subtitle: 'Performed by verified masters',
+      icon: Sparkles,
       iconColor: '#E7C878'
     },
     {
-      title: 'Secure Payments',
-      subtitle: 'Safe & encrypted checkout',
-      icon: Star,
+      title: 'Global Tracked Delivery',
+      subtitle: 'Carefully packed & insured',
+      icon: PackageCheck,
       iconColor: '#F59E0B'
     },
     {
-      title: 'Satisfaction Guarantee',
-      subtitle: 'Feel confident with every reading',
+      title: 'Sanctuary Guarantee',
+      subtitle: 'Authentic stones & yantras',
       icon: Globe,
       iconColor: '#06B6D4'
     }

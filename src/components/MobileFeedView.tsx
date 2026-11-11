@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Sparkles, Star } from 'lucide-react';
 import { Reader } from '../types';
 import { formatCurrencyPrice } from '../utils/currency';
@@ -51,54 +51,108 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
     };
   };
 
-  // Group readers for the 4 rows
-  // Row 1: Based on Your Chart (Colleen, Naomi, Tamara, Gabrielle, Beatrice, etc.)
-  const chartReaders = readers.filter(r => 
-    r.id === 'psychic-colleen' || 
-    r.id === 'psychic-naomi' || 
-    r.specialities?.some(s => s.toLowerCase().includes('chart') || s.toLowerCase().includes('astrology')) ||
-    r.category === 'Western Astrology' ||
-    r.category === 'Vedic Astrology' ||
-    r.category === 'Psychic & Intuitive'
-  );
+  // Group completely distinct, non-overlapping readers for all 4 rows
+  // Ensures NO astrologer profile picture is ever duplicated across rows
+  const { loveReaders, mostAccurateReaders, chartReaders, careerReaders } = useMemo(() => {
+    const used = new Set<string>();
 
-  // Row 2: Most Accurate (Vera, Emerson, Marcus, Oliver, etc.)
-  const mostAccurateReaders = readers.filter(r =>
-    r.id === 'psychic-vera' ||
-    r.id === 'psychic-emerson' ||
-    r.rating >= 4.95 ||
-    r.experienceYears >= 12
-  );
+    // Row 1: Best In Love Readings (Tamara, Gabrielle, Colleen, Naomi, Oliver, Jasper, Beatrice, etc.)
+    const love: Reader[] = [];
+    for (const r of readers) {
+      if (r.isActive === false) continue;
+      const isLove = 
+        r.id === 'psychic-tamara' ||
+        r.id === 'psychic-gabrielle' ||
+        r.id === 'psychic-colleen' ||
+        r.id === 'psychic-naomi' ||
+        r.id === 'tarot-oliver' ||
+        r.id === 'tarot-jasper' ||
+        r.id === 'tarot-beatrice' ||
+        r.specialities?.some(s => s.toLowerCase().includes('love') || s.toLowerCase().includes('soul') || s.toLowerCase().includes('relationship')) ||
+        r.specialties?.some(s => s.toLowerCase().includes('love') || s.toLowerCase().includes('relationship')) ||
+        r.category === 'Tarot';
+      if (isLove && !used.has(r.id)) {
+        love.push(r);
+        used.add(r.id);
+        if (love.length >= 8) break;
+      }
+    }
 
-  // Row 3: Best In Love Readings
-  const loveReaders = readers.filter(r =>
-    r.id === 'psychic-colleen' ||
-    r.id === 'psychic-naomi' ||
-    r.specialities?.some(s => s.toLowerCase().includes('love') || s.toLowerCase().includes('soul') || s.toLowerCase().includes('relationship')) ||
-    r.category === 'Tarot' ||
-    r.category === 'Psychic & Intuitive'
-  );
+    // Row 2: Most Accurate (Vera, Emerson, Marcus, Liam, Clara, Soren, Astrid, Maya, etc.)
+    const accurate: Reader[] = [];
+    for (const r of readers) {
+      if (r.isActive === false || used.has(r.id)) continue;
+      const isAccurate = r.id === 'psychic-vera' || r.id === 'psychic-emerson' || r.rating >= 4.95 || (r.experienceYears ?? r.experience_years ?? 0) >= 12;
+      if (isAccurate) {
+        accurate.push(r);
+        used.add(r.id);
+        if (accurate.length >= 8) break;
+      }
+    }
 
-  // Row 4: Career & Vedic Guidance
-  const careerReaders = readers.filter(r =>
-    r.specialities?.some(s => s.toLowerCase().includes('career') || s.toLowerCase().includes('vedic')) ||
-    r.category === 'Vedic Astrology' ||
-    r.category === 'Western Astrology'
-  );
+    // Row 3: Based On Your Chart (Western & Natal Chart Astrologers)
+    const chart: Reader[] = [];
+    for (const r of readers) {
+      if (r.isActive === false || used.has(r.id)) continue;
+      const isChart = 
+        r.category === 'Western Astrology' ||
+        r.specialities?.some(s => s.toLowerCase().includes('chart') || s.toLowerCase().includes('natal') || s.toLowerCase().includes('astrology')) ||
+        r.specialties?.some(s => s.toLowerCase().includes('chart') || s.toLowerCase().includes('astrology'));
+      if (isChart) {
+        chart.push(r);
+        used.add(r.id);
+        if (chart.length >= 8) break;
+      }
+    }
+
+    // Row 4: Career & Vedic Guidance (Vedic Masters & Career Advisors)
+    const career: Reader[] = [];
+    for (const r of readers) {
+      if (r.isActive === false || used.has(r.id)) continue;
+      const isCareer = 
+        r.category === 'Vedic Astrology' ||
+        r.specialities?.some(s => s.toLowerCase().includes('career') || s.toLowerCase().includes('vedic') || s.toLowerCase().includes('wealth') || s.toLowerCase().includes('business')) ||
+        r.specialties?.some(s => s.toLowerCase().includes('career') || s.toLowerCase().includes('vedic'));
+      if (isCareer) {
+        career.push(r);
+        used.add(r.id);
+        if (career.length >= 8) break;
+      }
+    }
+
+    // Fill any row that has fewer than 8 with remaining unassigned unique readers
+    const fillRow = (row: Reader[]) => {
+      if (row.length < 8) {
+        for (const r of readers) {
+          if (r.isActive === false || used.has(r.id)) continue;
+          row.push(r);
+          used.add(r.id);
+          if (row.length >= 8) break;
+        }
+      }
+    };
+    fillRow(love);
+    fillRow(accurate);
+    fillRow(chart);
+    fillRow(career);
+
+    return { loveReaders: love, mostAccurateReaders: accurate, chartReaders: chart, careerReaders: career };
+  }, [readers]);
 
   const renderReaderCard = (reader: Reader, keyPrefix: string) => {
     const prices = formatPrices(reader.ratePerMinute);
-    const expText = reader.experienceYears ? `Exp- ${reader.experienceYears} y` : `Exp- 10 y`;
+    const expYears = reader.experience_years ?? reader.experienceYears ?? 10;
+    const expText = `Exp: ${expYears} yrs`;
 
     return (
       <div
         key={`${keyPrefix}-${reader.id}`}
-        className="w-[155px] min-w-[155px] max-w-[155px] bg-[#0E1535]/95 hover:bg-[#121B42] border border-indigo-900/50 hover:border-amber-400/30 rounded-2xl p-2.5 shadow-xl transition-all flex flex-col justify-between shrink-0 snap-start text-center group"
+        className="w-[158px] min-w-[158px] max-w-[158px] bg-white hover:bg-slate-50/80 border border-gray-200/90 hover:border-amber-400/50 rounded-2xl p-2.5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between shrink-0 snap-start text-center group"
       >
         {/* Reader Photo with Rating Badge */}
         <div 
           onClick={() => onViewProfile(reader)}
-          className="relative w-full h-[145px] rounded-xl overflow-hidden cursor-pointer bg-indigo-950/50"
+          className="relative w-full h-[148px] rounded-xl overflow-hidden cursor-pointer bg-slate-100"
         >
           <img
             src={reader.image_url || reader.avatar}
@@ -107,16 +161,16 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           {/* Top-Left Rating Pill Badge ★ 4.98 / 4.99 */}
-          <div className="absolute top-2 left-2 bg-[#7C3AED] text-white text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md">
-            <Star className="w-3 h-3 fill-white text-white" />
-            <span>{(reader.rating && reader.rating < 5.0 ? reader.rating : 4.98).toFixed(2)}</span>
+          <div className="absolute top-2 left-2 bg-purple-950/90 text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md backdrop-blur-xs">
+            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+            <span className="text-white">{(reader.rating && reader.rating < 5.0 ? reader.rating : 4.98).toFixed(2)}</span>
           </div>
 
           {/* Top-Right Online Dot */}
           <div className="absolute top-2 right-2 flex items-center justify-center">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-[#0E1535]" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white" />
             </span>
           </div>
         </div>
@@ -124,31 +178,31 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
         {/* Reader Name (Fixed height for alignment) */}
         <h4 
           onClick={() => onViewProfile(reader)}
-          className="text-[14px] font-bold text-white mt-2 truncate px-1 cursor-pointer hover:text-[#F6D06E] transition-colors h-5 flex items-center justify-center"
+          className="text-[14px] font-bold text-gray-950 mt-2 truncate px-1 cursor-pointer hover:text-amber-800 transition-colors h-5 flex items-center justify-center font-sans"
           title={reader.name}
         >
           {reader.name}
         </h4>
 
-        {/* Row 1: Exp & Expert - Normal clean text */}
+        {/* Row 1: Exp & Expert - Clean normal text */}
         <div className="h-5 flex items-center justify-center gap-1.5 mt-1 text-[11px]">
-          <span className="text-[#d4af37] font-semibold">
+          <span className="text-purple-900 font-semibold">
             {expText}
           </span>
-          <span className="text-slate-500">·</span>
-          <span className="text-slate-300 font-medium">
+          <span className="text-gray-300">·</span>
+          <span className="text-gray-700 font-medium">
             Expert
           </span>
         </div>
 
         {/* Row 2: Skills - Clean normal text without header/label */}
         <div className="h-5 flex items-center justify-center mt-0.5 px-1 text-[11px] truncate max-w-full">
-          <span className="text-slate-200 font-medium truncate">
+          <span className="text-gray-600 font-medium truncate">
             {getReaderSkillBadges(reader).map(b => b.label).join(' · ')}
           </span>
         </div>
 
-        {/* Chat Action Button (Yellow/Gold style as earlier) */}
+        {/* Chat Action Button (Yellow/Gold style as requested) */}
         <button
           type="button"
           onClick={() => onStartChat(reader)}
@@ -159,8 +213,8 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
 
         {/* Price Line Below Chat Button */}
         <div className="flex items-center justify-center gap-1.5 text-[11px] mt-2 font-medium">
-          <span className="line-through text-slate-400/90">{prices.original}</span>
-          <span className="text-white font-bold">{prices.current}/min</span>
+          <span className="line-through text-gray-400">{prices.original}</span>
+          <span className="text-gray-950 font-black">{prices.current}/min</span>
         </div>
       </div>
     );
@@ -230,7 +284,7 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
 
         {/* Horizontal Scrollable Row */}
         <div className="flex gap-3 overflow-x-auto pb-2 pt-0.5 scrollbar-none snap-x snap-mandatory -mx-4 px-4">
-          {loveReaders.slice(0, 8).map(reader => renderReaderCard(reader, 'love'))}
+          {loveReaders.slice(0, 8).map((reader: Reader) => renderReaderCard(reader, 'love'))}
         </div>
       </div>
 
@@ -248,7 +302,7 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
 
         {/* Horizontal Scrollable Row */}
         <div className="flex gap-3 overflow-x-auto pb-2 pt-0.5 scrollbar-none snap-x snap-mandatory -mx-4 px-4">
-          {mostAccurateReaders.slice(0, 8).map(reader => renderReaderCard(reader, 'accurate'))}
+          {mostAccurateReaders.slice(0, 8).map((reader: Reader) => renderReaderCard(reader, 'accurate'))}
         </div>
       </div>
 
@@ -266,7 +320,7 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
 
         {/* Horizontal Scrollable Row */}
         <div className="flex gap-3 overflow-x-auto pb-2 pt-0.5 scrollbar-none snap-x snap-mandatory -mx-4 px-4">
-          {chartReaders.slice(0, 8).map(reader => renderReaderCard(reader, 'chart'))}
+          {chartReaders.slice(0, 8).map((reader: Reader) => renderReaderCard(reader, 'chart'))}
         </div>
       </div>
 
@@ -285,7 +339,7 @@ export const MobileFeedView: React.FC<MobileFeedViewProps> = ({
 
           {/* Horizontal Scrollable Row */}
           <div className="flex gap-3 overflow-x-auto pb-2 pt-0.5 scrollbar-none snap-x snap-mandatory -mx-4 px-4">
-            {careerReaders.slice(0, 8).map(reader => renderReaderCard(reader, 'career'))}
+            {careerReaders.slice(0, 8).map((reader: Reader) => renderReaderCard(reader, 'career'))}
           </div>
         </div>
       )}

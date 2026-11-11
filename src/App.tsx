@@ -142,7 +142,8 @@ export default function App() {
     detectUserGeo().then(geo => {
       if (geo) {
         setDetectedGeo(geo);
-        if (!localStorage.getItem('astral_currency')) {
+        const hasManualOverride = localStorage.getItem('astral_currency_manual_override') === 'true';
+        if (!hasManualOverride) {
           setCurrentCurrency(geo.currency);
           localStorage.setItem('astral_currency', geo.currency);
         }
@@ -895,17 +896,17 @@ export default function App() {
 
       {/* TOP STICKY BAR: ROTATING MARQUEE TICKER AT VERY TOP + GLOBAL LUXURY HEADER */}
       <div className="sticky top-0 z-40 shadow-md shadow-amber-950/10 w-full max-w-full overflow-x-clip">
-        <OfferBanner onClaimOffer={() => handleNavigateSection('readers')} />
+        <OfferBanner onClaimOffer={() => handleNavigateSection('rituals')} />
         <Header
-          onStartReading={() => handleNavigateSection('readers')}
+          onStartReading={() => handleNavigateSection('rituals')}
           onNavigateSection={handleNavigateSection}
           onOpenExplorer={handleOpenExplorer}
-          onOpenBirthChartModal={() => handleNavigateSection('birth-chart')}
+          onOpenBirthChartModal={() => handleNavigateSection('rituals')}
           onOpenProfile={() => setIsDashboardOpen(true)}
           onOpenLogin={() => setIsAuthModalOpen(true)}
           isAuthenticated={isAuthenticated}
           onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenAudio={() => setIsHoroscopeModalOpen(true)}
+          onOpenAudio={() => setIsRitualsModalOpen(true)}
           onOpenDrawer={() => setIsDrawerOpen(true)}
           currentLanguage={currentLanguage}
           onSelectLanguage={setCurrentLanguage}
@@ -925,64 +926,30 @@ export default function App() {
       </div>
 
 
-      {/* MAIN WEBSITE CONTENT */}
+      {/* MAIN WEBSITE CONTENT - TEMPORARILY EXCLUSIVELY SACRED REMEDIES & CONSECRATED STORE */}
       <main className="flex-1 pb-16 md:pb-0 relative z-10">
-        {/* 1. HERO */}
+        {/* 1. HERO - Focused on Remedies & Consecrated Creations with 5 rotating destiny cards */}
         <Hero
-          onCreateBirthChart={handleOpenBirthChart}
-          onFindAstrologer={handleQuickStartConsultation}
-          onOpenCompatibility={() => handleNavigateSection('compatibility')}
+          onExploreRemedies={() => handleNavigateSection('rituals')}
+          onOpenStore={() => setIsShopOpen(true)}
+          onSelectCardRemedy={(_topic) => handleNavigateSection('rituals')}
+          onCreateBirthChart={() => handleNavigateSection('rituals')}
+          onFindAstrologer={() => handleNavigateSection('rituals')}
+          onOpenCompatibility={() => handleNavigateSection('rituals')}
         />
 
-        {/* MOBILE VIEW ONLY: Dedicated mobile feed matching user reference directly below Hero */}
-        <div className="lg:hidden">
-          <MobileFeedView
-            readers={readers}
-            onStartChat={handleInitiateChatWithReader}
-            onViewProfile={(reader) => setSelectedProfileReader(reader)}
-            onExploreAll={() => setIsViewAllOpen(true)}
-            onSelectPromptQuestion={(_q) => {
-              const onlineReader = readers.find(r => r.isOnline) || readers[0];
-              setSelectedIntakeReader(onlineReader);
-            }}
+        {/* 2. TRUST & CONSECRATION CREDENTIALS BAR */}
+        <TrustBar />
+
+        {/* 3. CENTERPIECE: SACRED RITUALS, HEALINGS & CONSECRATED PRODUCTS */}
+        <div id="rituals-showcase" className="relative z-10">
+          <RitualsAndSpellsSection
             currentCurrency={currentCurrency}
+            initialTab={ritualsInitialTab}
           />
         </div>
 
-        {/* DESKTOP-ONLY SECTIONS (Cards carousel, trust bar, choose your path) */}
-        <div className="hidden lg:block">
-          <TrustBar />
-          <ChooseYourPath
-            onSelectPath={() => {
-              const onlineReader = readers.find(r => r.isOnline) || readers[0];
-              setSelectedIntakeReader(onlineReader);
-            }}
-          />
-          <AstrologersCarousel
-            readers={readers}
-            onViewProfile={(reader) => setSelectedProfileReader(reader)}
-            onStartChat={handleInitiateChatWithReader}
-            onExploreAll={() => setIsViewAllOpen(true)}
-            onOpenSupport={() => setIsSupportOpen(true)}
-            currentCurrency={currentCurrency}
-          />
-        </div>
-
-        {/* 2. LOVE & COMPATIBILITY (COMPLETELY SHIFTED DIRECTLY UNDER THE ASTROLOGERS SECTION) */}
-        <CompatibilitySection
-          onChatWithLovePsychics={(_topic) => {
-            // Find top love psychic (Psychic Tamara or Psychic Gabrielle, or top online love reader)
-            const loveReader = readers.find(r => 
-              r.id === 'psychic-tamara' || 
-              r.id === 'psychic-gabrielle' || 
-              r.specialities?.some(s => s.toLowerCase().includes('love'))
-            ) || readers[0];
-
-            handleInitiateChatWithReader(loveReader);
-          }}
-        />
-
-        {/* 3. REVIEWS & TESTIMONIALS (FIXED IN UPPER SIDE - Social Proof directly after Compatibility) */}
+        {/* 4. REVIEWS & TESTIMONIALS */}
         <TestimonialsSection />
 
         {/* 5. HOW IT WORKS */}
@@ -994,13 +961,13 @@ export default function App() {
         {/* 7. FAQ */}
         <FAQSection />
 
-        {/* 9. FINAL CTA (Start Free Chat with Psychics - Space tightened) */}
+        {/* 8. FINAL CTA */}
         <FinalCTA
-          onStartBirthChart={handleQuickStartConsultation}
-          onFindAstrologer={handleQuickStartConsultation}
+          onExploreRemedies={() => handleNavigateSection('rituals')}
+          onOpenStore={() => setIsShopOpen(true)}
         />
 
-        {/* 10. VLOGS & GUIDES */}
+        {/* 9. VLOGS & GUIDES */}
         <LearnSection onNavigateSection={handleNavigateSection} />
       </main>
 
@@ -1013,20 +980,19 @@ export default function App() {
         onSelectLanguage={setCurrentLanguage}
       />
 
-      {/* MOBILE BOTTOM NAVIGATION */}
+      {/* MOBILE BOTTOM NAVIGATION - 5 STYLISH UNIFORM BUTTONS: Home, Remedies, Mall, Orders, Support */}
       <MobileBottomNav
-        activeSection={isWalletOpen ? 'chatroom' : isShopOpen ? 'mall' : currentSection}
+        activeSection={isWalletOpen ? 'orders' : isShopOpen ? 'mall' : currentSection}
         onNavigateSection={handleNavigateSection}
         onGoHome={handleGoHome}
         onOpenProfile={() => setIsDashboardOpen(true)}
-        onOpenChatroom={() => {
+        onOpenRituals={() => handleNavigateSection('rituals')}
+        onOpenMall={() => setIsShopOpen(true)}
+        onOpenOrders={() => {
           setWalletInitialTab('order');
           setIsWalletOpen(true);
         }}
-        onOpenMall={() => setIsShopOpen(true)}
-        onOpenRituals={() => setIsShopOpen(true)}
-        onOpenTarot={() => setIsTarotModalOpen(true)}
-        onOpenHoroscope={() => setIsHoroscopeModalOpen(true)}
+        onOpenSupport={() => setIsSupportOpen(true)}
       />
 
       {/* ASTRAL 18-PILLAR GLOBAL STRUCTURE UNIVERSAL EXPLORER */}
@@ -1177,6 +1143,11 @@ export default function App() {
         onOpenRedeem={() => setIsRedeemOpen(true)}
         onOpenSettings={() => setIsDashboardOpen(true)}
         onOpenShop={() => setIsShopOpen(true)}
+        onOpenRituals={() => {
+          setIsDrawerOpen(false);
+          setIsShopOpen(false);
+          handleNavigateSection('rituals');
+        }}
         onLogout={async () => {
           await signOutUser();
           localStorage.removeItem('astral_is_logged_in');
@@ -1348,10 +1319,11 @@ export default function App() {
 
       {/* DEDICATED COSMIC SHOP & FESTIVE BESTSELLERS STORE SCREEN */}
       {isShopOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-white">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-white">
           <AstralStoreWhiteView
             onGoBack={() => setIsShopOpen(false)}
             currentCurrency={currentCurrency}
+            onCurrencyChange={(curr) => setCurrentCurrency(curr)}
           />
         </div>
       )}
@@ -1389,7 +1361,7 @@ export default function App() {
 
 
       {/* Floating Admin Panel Quick Switcher Button (Strictly for authorized owner: bankush014@gmail.com) */}
-      {isOwnerAdmin && (
+      {isOwnerAdmin && !isShopOpen && !isAdminView && (
         <div className="fixed bottom-20 left-4 z-50 flex items-center gap-2">
           <a
             href="/admin.html?tab=overview"
@@ -1404,21 +1376,6 @@ export default function App() {
           >
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span>Admin Panel</span>
-          </a>
-
-          <a
-            href="/admin.html?tab=chats"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => {
-              e.preventDefault();
-              openInNewTab('/admin.html?tab=chats');
-            }}
-            className="px-3 py-2 rounded-xl bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-400/50 shadow-xl backdrop-blur-md text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all hover:scale-105"
-            title="Open Astrologer Workstation & Live Console in new tab"
-          >
-            <Compass className="w-4 h-4 text-amber-300" />
-            <span>Astrologer Dashboard</span>
           </a>
         </div>
       )}

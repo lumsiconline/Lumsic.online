@@ -6,28 +6,28 @@ export const FAQSection: React.FC = () => {
 
   const faqs = [
     {
-      q: 'How does the first chat free offer work?',
-      a: 'Every new user gets their first chat complimentary with any verified psychic, tarot reader, or spiritual advisor. Your free chat starts when your advisor joins the chat and greets you. No credit card is required, and there is zero obligation.'
+      q: 'What are LUMSIC Sacred Remedies & Distance Healings?',
+      a: 'LUMSIC sacred remedies encompass authentic Vedic pujas, distance energy transmissions, 7-chakra pranic cleansing, and road-opening ceremonies conducted by seasoned practitioners with genuine completion reports.'
     },
     {
-      q: 'How accurate is the birth chart calculation?',
-      a: 'LUMSIC uses high-precision astronomical algorithms based on NASA JPL ephemeris tables and Lahiri Ayanamsha for planetary calculations. Planetary degrees, Lagna cusps, and transits are calculated to the exact second.'
+      q: 'Are the physical store products consecrated before shipping?',
+      a: 'Yes, 100%. Every sacred talisman, pyrite wealth ring, gemstone bracelet, and yantra undergoes authentic Vedic cleansing with holy water, chanting of Vedic mantras, and energisation before insured global dispatch.'
     },
     {
-      q: 'Can I choose between Psychic and Tarot readings?',
-      a: 'Yes! LUMSIC features certified clairvoyants, psychic advisors, tarot readers, and spiritual guides. You can select your preferred discipline anytime.'
+      q: 'How does distance energy healing work?',
+      a: 'Spiritual energy transcends physical geography. Our masters focus upon your name, birth details, and energetic imprint during the sacred muhurta (auspicious hour) to unblock subtle channels and restore harmony.'
     },
     {
-      q: 'Are the readers real humans or AI bots?',
-      a: '100% real verified human advisors. LUMSIC strictly forbids AI bot consultations. Every practitioner on our platform is a seasoned expert with verified background and credentials.'
+      q: 'What is included with my sacred store delivery?',
+      a: 'Every package contains your consecrated artifact, an energized selenite cleansing plate (on eligible items), sacred vibhuti, a certificate of blessing, and an activation mantra guide.'
     },
     {
-      q: 'Is my consultation private and confidential?',
-      a: 'Yes, completely. Your chats, call logs, birth details, and questions are protected with 256-bit bank-level encryption. Your data is never sold or shared with any third party.'
+      q: 'How long does dispatch and delivery take?',
+      a: 'Consecration and packaging take 1 to 2 business days. Tracked global shipping takes 3 to 7 business days worldwide with secure shock-proof packaging.'
     },
     {
-      q: 'What if I don’t know my exact birth time?',
-      a: 'You can still get an accurate reading! Our expert readers can use intuitive clairvoyance, energy sensing, or Tarot to answer your questions accurately without an exact birth time.'
+      q: 'Can I book custom remedies for love, reunion, or prosperity?',
+      a: 'Yes! Our practitioners perform custom ceremonies tailored to your exact situation, including Love & Soulmate Binding, Heartbreak Recovery, and Road Opener prosperity pujas.'
     }
   ];
 

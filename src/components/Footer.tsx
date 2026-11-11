@@ -50,18 +50,17 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Main Columns Grid (Only verified features available on the website) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pb-12 border-b border-[#E5D29C]/80">
           
-          {/* Column 1: EXPLORE */}
+          {/* Column 1: SACRED REMEDIES */}
           <div className="space-y-3">
-            <h4 className="text-xs uppercase font-extrabold text-[#2B2418] tracking-wider font-serif">Explore</h4>
+            <h4 className="text-xs uppercase font-extrabold text-[#2B2418] tracking-wider font-serif">Sacred Remedies</h4>
             <ul className="space-y-2">
               {[
-                { label: 'Psychics & Astrologers', id: 'readers' },
-                { label: 'Love Compatibility', id: 'compatibility' },
-                { label: 'Daily Horoscope', id: 'horoscope' },
-                { label: 'Tarot Oracle', id: 'tarot' },
-                { label: 'Birth Chart Calculator', id: 'birth-chart' },
-                { label: 'Sacred Rituals & Spells', id: 'rituals' },
-                { label: 'LUMSIC Shop', id: 'shop' },
+                { label: 'Love & Soulmate Binding', id: 'rituals' },
+                { label: 'Ex & Reunion Healing', id: 'rituals' },
+                { label: '7-Chakra Energy Cleansing', id: 'rituals' },
+                { label: 'Road Opener & Prosperity', id: 'rituals' },
+                { label: 'Ancestral Karma Clearing', id: 'rituals' },
+                { label: 'Distance Vedic Pujas', id: 'rituals' },
               ].map((item, idx) => (
                 <li key={idx}>
                   <button
@@ -76,16 +75,16 @@ export const Footer: React.FC<FooterProps> = ({
             </ul>
           </div>
 
-          {/* Column 2: FREE TOOLS */}
+          {/* Column 2: CONSECRATED STORE */}
           <div className="space-y-3">
-            <h4 className="text-xs uppercase font-extrabold text-[#2B2418] tracking-wider font-serif">Free Tools</h4>
+            <h4 className="text-xs uppercase font-extrabold text-[#2B2418] tracking-wider font-serif">Consecrated Store</h4>
             <ul className="space-y-2">
               {[
-                { label: 'Free Daily Horoscope', id: 'horoscope' },
-                { label: 'Daily Tarot Card Draw', id: 'tarot' },
-                { label: 'Birth Chart Calculator', id: 'birth-chart' },
-                { label: 'Zodiac Love Compatibility', id: 'compatibility' },
-                { label: 'First Chat Free with Psychics', id: 'readers' }
+                { label: 'Pyrite Wealth Magnets & Rings', id: 'shop' },
+                { label: 'Vedic Gemstone Bracelets', id: 'shop' },
+                { label: 'Consecrated Copper Yantras', id: 'shop' },
+                { label: 'Free Selenite Cleansing Plate', id: 'shop' },
+                { label: 'Sanctuary Consecration Guarantee', id: 'rituals' },
               ].map((item, idx) => (
                 <li key={idx}>
                   <button

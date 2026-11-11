@@ -1,41 +1,41 @@
 import React from 'react';
-import { Target, Users, MessageSquare, Compass, ArrowRight } from 'lucide-react';
+import { Target, Sparkles, PackageCheck, Flame, ArrowRight } from 'lucide-react';
 
 export const HowItWorks: React.FC = () => {
   const steps = [
     {
       num: '01',
-      title: 'Choose',
-      tagline: 'Select Your Life Area',
-      desc: 'Pick your path in Love, Career, Relationships, Life, or calculate your free birth chart.',
+      title: 'Choose Remedy',
+      tagline: 'Select Sacred Offering',
+      desc: 'Pick your consecrated item, love & reunion ritual, chakra healing, or prosperity yantra.',
       icon: Target,
       bgColor: '#FEF3C7',
       color: '#B45309'
     },
     {
       num: '02',
-      title: 'Match',
-      tagline: 'Top-Rated Readers',
-      desc: 'Browse over 1,200+ Verified Psychics & Tarot Readers, and spiritual advisors.',
-      icon: Users,
+      title: 'Consecration',
+      tagline: 'Vedic Energy Cleansing',
+      desc: 'Each sacred artifact and ritual is custom-cleansed and energized under sacred Vedic mantras.',
+      icon: Sparkles,
       bgColor: '#EEF2FF',
       color: '#4F46E5'
     },
     {
       num: '03',
-      title: 'Connect',
-      tagline: 'Instant Live Chat',
-      desc: 'Start private 1-on-1 session instantly. Your first chat is 100% free.',
-      icon: MessageSquare,
+      title: 'Sacred Ceremony',
+      tagline: 'Distance Pujas & Healing',
+      desc: 'Distance healings and puja ceremonies are performed with photo/video proof sent to you.',
+      icon: Flame,
       bgColor: '#ECFDF5',
       color: '#059669'
     },
     {
       num: '04',
-      title: 'Get Guidance',
-      tagline: 'Instant Remedy & Clarity',
-      desc: 'Receive deep answers, planetary remedies, and empowering life roadmaps.',
-      icon: Compass,
+      title: 'Global Delivery',
+      tagline: 'Tracked & Insured',
+      desc: 'Physical items are safely packed with sacred vibhuti and delivered directly to your doorstep.',
+      icon: PackageCheck,
       bgColor: '#FFF1F2',
       color: '#E11D48'
     }
@@ -50,11 +50,11 @@ export const HowItWorks: React.FC = () => {
           <span className="text-[11px] uppercase font-extrabold tracking-widest text-[#B45309] block mb-1">
             Simple 4-Step Process
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-950 tracking-tight mb-1.5">
-            How It Works
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-950 tracking-tight mb-1.5 font-serif">
+            How Remedies &amp; Store Work
           </h2>
           <p className="text-xs sm:text-sm text-gray-600">
-            Connecting with verified psychics, tarot readers &amp; top-rated spiritual advisors takes less than 30 seconds.
+            From Vedic consecration to sacred distance healing and doorstep delivery — authentic sanctuary quality guaranteed.
           </p>
         </div>
 

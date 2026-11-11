@@ -46,13 +46,96 @@ export const CURRENCY_CONFIG: Record<string, { symbol: string; rate: number; nam
 };
 
 export const SUPPORTED_CURRENCIES = [
-  { code: 'INR', symbol: '₹', label: 'INR (₹)', name: 'Indian Rupee', minRecharge: 50 },
-  { code: 'USD', symbol: '$', label: 'USD ($)', name: 'US Dollar', minRecharge: 5 },
-  { code: 'GBP', symbol: '£', label: 'GBP (£)', name: 'British Pound', minRecharge: 5 },
-  { code: 'EUR', symbol: '€', label: 'EUR (€)', name: 'Euro', minRecharge: 5 },
-  { code: 'CAD', symbol: 'CA$', label: 'CAD (CA$)', name: 'Canadian Dollar', minRecharge: 5 },
-  { code: 'AUD', symbol: 'A$', label: 'AUD (A$)', name: 'Australian Dollar', minRecharge: 5 },
+  { code: 'INR', symbol: '₹', label: 'INR (₹)', name: 'Indian Rupee', flag: '🇮🇳', minRecharge: 50 },
+  { code: 'USD', symbol: '$', label: 'USD ($)', name: 'US Dollar', flag: '🇺🇸', minRecharge: 5 },
+  { code: 'GBP', symbol: '£', label: 'GBP (£)', name: 'British Pound', flag: '🇬🇧', minRecharge: 5 },
+  { code: 'EUR', symbol: '€', label: 'EUR (€)', name: 'Euro', flag: '🇪🇺', minRecharge: 5 },
+  { code: 'CAD', symbol: 'CA$', label: 'CAD (CA$)', name: 'Canadian Dollar', flag: '🇨🇦', minRecharge: 5 },
+  { code: 'AUD', symbol: 'A$', label: 'AUD (A$)', name: 'Australian Dollar', flag: '🇦🇺', minRecharge: 5 },
+  { code: 'AED', symbol: 'AED ', label: 'AED (Dirham)', name: 'UAE Dirham', flag: '🇦🇪', minRecharge: 20 },
 ];
+
+/**
+ * Accurately convert INR shop product price to visitor's detected currency
+ */
+export function convertInrToCurrency(amountINR: number, currencyCode: string = 'INR'): {
+  formatted: string;
+  symbol: string;
+  value: number;
+} {
+  const code = currencyCode.toUpperCase();
+  if (code === 'INR') {
+    return {
+      formatted: `₹${amountINR.toLocaleString('en-IN')}`,
+      symbol: '₹',
+      value: amountINR
+    };
+  }
+
+  let rate = 0.012; // default USD
+  let symbol = '$';
+
+  if (code === 'USD') { rate = 0.012; symbol = '$'; }
+  else if (code === 'GBP') { rate = 0.0095; symbol = '£'; }
+  else if (code === 'EUR') { rate = 0.011; symbol = '€'; }
+  else if (code === 'CAD') { rate = 0.016; symbol = 'CA$'; }
+  else if (code === 'AUD') { rate = 0.018; symbol = 'A$'; }
+  else if (code === 'AED') { rate = 0.044; symbol = 'AED '; }
+  else if (code === 'SGD') { rate = 0.016; symbol = 'S$'; }
+  else if (code === 'NZD') { rate = 0.020; symbol = 'NZ$'; }
+
+  const converted = Math.max(1, Math.round(amountINR * rate));
+  return {
+    formatted: `${symbol}${converted.toLocaleString('en-US')}`,
+    symbol,
+    value: converted
+  };
+}
+
+/**
+ * Accurately convert USD base ritual price to visitor's detected currency
+ */
+export function convertUsdToCurrency(amountUSD: number, currencyCode: string = 'USD'): {
+  formatted: string;
+  symbol: string;
+  value: number;
+} {
+  const code = currencyCode.toUpperCase();
+  if (code === 'USD') {
+    return {
+      formatted: `$${amountUSD.toLocaleString('en-US')}`,
+      symbol: '$',
+      value: amountUSD
+    };
+  }
+
+  if (code === 'INR') {
+    const inrVal = Math.round(amountUSD * 83);
+    return {
+      formatted: `₹${inrVal.toLocaleString('en-IN')}`,
+      symbol: '₹',
+      value: inrVal
+    };
+  }
+
+  let multiplier = 1.0;
+  let symbol = '$';
+
+  if (code === 'GBP') { multiplier = 0.80; symbol = '£'; }
+  else if (code === 'EUR') { multiplier = 0.92; symbol = '€'; }
+  else if (code === 'CAD') { multiplier = 1.35; symbol = 'CA$'; }
+  else if (code === 'AUD') { multiplier = 1.50; symbol = 'A$'; }
+  else if (code === 'AED') { multiplier = 3.67; symbol = 'AED '; }
+  else if (code === 'SGD') { multiplier = 1.34; symbol = 'S$'; }
+  else if (code === 'NZD') { multiplier = 1.63; symbol = 'NZ$'; }
+
+  const converted = Math.max(1, Math.round(amountUSD * multiplier));
+  return {
+    formatted: `${symbol}${converted.toLocaleString('en-US')}`,
+    symbol,
+    value: converted
+  };
+}
 
 export const MINIMUM_RECHARGE_AMOUNT = 5; // Standard minimum for USD/GBP/EUR
 
@@ -81,22 +164,31 @@ export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD
 /**
  * Timezone-based country heuristic (instantaneous, offline-safe, 0ms latency)
  */
+/**
+ * Timezone & locale-based country heuristic (instantaneous, offline-safe, 0ms latency)
+ */
 function detectFromTimezone(): CountryInfo | null {
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) {
+    // 1. Precise Indian Standard Time offset check (UTC+5:30 -> -330 min)
+    const offset = new Date().getTimezoneOffset();
+    if (offset === -330) {
       return COUNTRIES.find(c => c.code === 'IN') || null;
     }
-    if (tz.includes('London') || tz.includes('Belfast')) {
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India') || tz === 'Asia/Colombo') {
+      return COUNTRIES.find(c => c.code === 'IN') || null;
+    }
+    if (tz.includes('London') || tz.includes('Belfast') || tz.includes('Dublin')) {
       return COUNTRIES.find(c => c.code === 'GB') || null;
     }
-    if (tz.includes('Toronto') || tz.includes('Vancouver') || tz.includes('Montreal') || tz.includes('Edmonton') || tz.includes('Winnipeg')) {
+    if (tz.includes('Toronto') || tz.includes('Vancouver') || tz.includes('Montreal') || tz.includes('Edmonton') || tz.includes('Winnipeg') || tz.includes('Halifax')) {
       return COUNTRIES.find(c => c.code === 'CA') || null;
     }
-    if (tz.includes('Sydney') || tz.includes('Melbourne') || tz.includes('Brisbane') || tz.includes('Perth') || tz.includes('Adelaide')) {
+    if (tz.includes('Sydney') || tz.includes('Melbourne') || tz.includes('Brisbane') || tz.includes('Perth') || tz.includes('Adelaide') || tz.includes('Hobart')) {
       return COUNTRIES.find(c => c.code === 'AU') || null;
     }
-    if (tz.includes('Dubai')) {
+    if (tz.includes('Dubai') || tz.includes('Muscat')) {
       return COUNTRIES.find(c => c.code === 'AE') || null;
     }
     if (tz.includes('Singapore')) {
@@ -110,7 +202,6 @@ function detectFromTimezone(): CountryInfo | null {
     if (tz.includes('Rome')) return COUNTRIES.find(c => c.code === 'IT') || null;
     if (tz.includes('Madrid')) return COUNTRIES.find(c => c.code === 'ES') || null;
     if (tz.includes('Amsterdam')) return COUNTRIES.find(c => c.code === 'NL') || null;
-    if (tz.includes('Dublin')) return COUNTRIES.find(c => c.code === 'IE') || null;
     if (tz.includes('Zurich')) return COUNTRIES.find(c => c.code === 'CH') || null;
     if (tz.startsWith('America/')) {
       return COUNTRIES.find(c => c.code === 'US') || null;
@@ -120,22 +211,51 @@ function detectFromTimezone(): CountryInfo | null {
 }
 
 /**
- * Detects user country & currency based on stored preference, local /api/geo, or timezone heuristics.
- * Fully resilient with no network blocking or unhandled console errors.
+ * Browser Language heuristic
  */
-export async function detectUserGeo(): Promise<CountryInfo> {
-  const defaultCountry = COUNTRIES.find(c => c.code === 'US') || COUNTRIES[0];
-
-  // 1. Return saved preference if already chosen by visitor
+function detectFromBrowserLanguage(): CountryInfo | null {
   try {
-    const savedCode = localStorage.getItem('astral_country');
-    if (savedCode) {
-      const savedMatch = COUNTRIES.find(c => c.code.toUpperCase() === savedCode.toUpperCase());
-      if (savedMatch) return savedMatch;
+    const langs = navigator.languages || [navigator.language || ''];
+    for (const l of langs) {
+      const lower = l.toLowerCase();
+      if (lower.includes('-in') || lower.startsWith('hi') || lower.startsWith('te') || lower.startsWith('ta') || lower.startsWith('mr') || lower.startsWith('bn') || lower.startsWith('gu')) {
+        return COUNTRIES.find(c => c.code === 'IN') || null;
+      }
+      if (lower.includes('-gb')) return COUNTRIES.find(c => c.code === 'GB') || null;
+      if (lower.includes('-ca')) return COUNTRIES.find(c => c.code === 'CA') || null;
+      if (lower.includes('-au')) return COUNTRIES.find(c => c.code === 'AU') || null;
+      if (lower.includes('-ae')) return COUNTRIES.find(c => c.code === 'AE') || null;
+      if (lower.includes('-de')) return COUNTRIES.find(c => c.code === 'DE') || null;
+      if (lower.includes('-fr')) return COUNTRIES.find(c => c.code === 'FR') || null;
     }
   } catch {}
+  return null;
+}
 
-  // 2. Try fast local backend /api/geo with 1200ms timeout
+/**
+ * Detects user country & currency based on:
+ * 1. Explicit user override (if chosen via UI currency picker)
+ * 2. Real IP-based Geo from local backend /api/geo
+ * 3. Fast public Geo IP lookup (api.country.is)
+ * 4. Zero-latency client timezone and offset heuristics
+ * 5. Browser language tags
+ */
+export async function detectUserGeo(forceReDetect: boolean = false): Promise<CountryInfo> {
+  const defaultCountry = COUNTRIES.find(c => c.code === 'IN') || COUNTRIES.find(c => c.code === 'US') || COUNTRIES[0];
+
+  // 1. Return manual user choice if visitor explicitly picked currency via UI
+  if (!forceReDetect) {
+    try {
+      const isManual = localStorage.getItem('astral_currency_manual_override') === 'true';
+      const savedCode = localStorage.getItem('astral_country');
+      if (isManual && savedCode) {
+        const savedMatch = COUNTRIES.find(c => c.code.toUpperCase() === savedCode.toUpperCase());
+        if (savedMatch) return savedMatch;
+      }
+    } catch {}
+  }
+
+  // 2. Try local backend /api/geo with 1200ms timeout
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1200);
@@ -161,7 +281,33 @@ export async function detectUserGeo(): Promise<CountryInfo> {
     }
   } catch {}
 
-  // 3. Instant client timezone heuristic (100% reliable, zero network latency)
+  // 3. Fast direct public Geo-IP lookup from visitor's real client IP
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const res = await fetch('https://api.country.is', {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      const code = String(data?.country || '').toUpperCase();
+      if (code) {
+        const match = COUNTRIES.find(c => c.code.toUpperCase() === code);
+        if (match) {
+          try {
+            localStorage.setItem('astral_country', match.code);
+            localStorage.setItem('astral_currency', match.currency);
+          } catch {}
+          return match;
+        }
+      }
+    }
+  } catch {}
+
+  // 4. Instant client timezone heuristic (100% reliable, zero network latency)
   const tzMatch = detectFromTimezone();
   if (tzMatch) {
     try {
@@ -171,7 +317,26 @@ export async function detectUserGeo(): Promise<CountryInfo> {
     return tzMatch;
   }
 
-  // 4. Fallback to default
+  // 5. Browser Language check
+  const langMatch = detectFromBrowserLanguage();
+  if (langMatch) {
+    try {
+      localStorage.setItem('astral_country', langMatch.code);
+      localStorage.setItem('astral_currency', langMatch.currency);
+    } catch {}
+    return langMatch;
+  }
+
+  // 6. Saved previous preference if exists
+  try {
+    const savedCode = localStorage.getItem('astral_country');
+    if (savedCode) {
+      const savedMatch = COUNTRIES.find(c => c.code.toUpperCase() === savedCode.toUpperCase());
+      if (savedMatch) return savedMatch;
+    }
+  } catch {}
+
+  // 7. Fallback to default
   return defaultCountry;
 }
 /**

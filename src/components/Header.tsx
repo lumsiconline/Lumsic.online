@@ -31,18 +31,18 @@ export interface HeaderProps {
 
 // Quick suggestions for the search bar
 const TRENDING_SEARCHES = [
-  { label: 'Best In Love Readings', icon: Heart, sectionId: 'readers' },
-  { label: 'Love Compatibility', icon: Heart, sectionId: 'compatibility' },
-  { label: "Today's Horoscope", icon: Compass, sectionId: 'horoscope' },
-  { label: 'Daily Tarot Oracle', icon: Layers, sectionId: 'tarot' },
-  { label: 'Consecrated Rituals & Spells', icon: Flame, sectionId: 'rituals' },
+  { label: 'Love & Reunion Rituals', icon: Heart, sectionId: 'rituals' },
+  { label: '7-Chakra Energy Healing', icon: Sparkles, sectionId: 'rituals' },
+  { label: 'Consecrated Pyrite Magnet', icon: ShoppingBag, sectionId: 'shop' },
+  { label: 'Vedic Gemstone Bracelets', icon: ShoppingBag, sectionId: 'shop' },
+  { label: 'Road Opener & Prosperity', icon: Flame, sectionId: 'rituals' },
   { label: 'LUMSIC Sacred Store', icon: ShoppingBag, sectionId: 'shop' },
 ];
 
-const POPULAR_ASTROLOGERS = [
-  { name: 'Dr. Alistair Thorne', specialty: 'Vedic & Karmic Astrology', rating: '4.98' },
-  { name: 'Genevieve Laurent', specialty: 'Tarot & Twin Flame Clarity', rating: '4.99' },
-  { name: 'Pandit Rameshwar', specialty: 'Kundli & Dosha Remedies', rating: '4.97' },
+const POPULAR_REMEDIES = [
+  { name: 'Sacred Love Binding Ceremony', specialty: 'Vedic Pujas & Distance Rituals', rating: '4.99' },
+  { name: '7-Chakra Deep Energy Cleansing', specialty: 'Master Pranic Cleansing', rating: '4.98' },
+  { name: 'Consecrated Pyrite Wealth Ring', specialty: 'Hand-Blessed Astral Jewelry', rating: '4.97' },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -216,10 +216,8 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navLinks = [
-    { id: 'horoscope', label: 'Horoscope' },
-    { id: 'tarot', label: 'Tarot' },
-    { id: 'rituals', label: 'Rituals' },
-    { id: 'shop', label: 'Shop', badge: 'New' },
+    { id: 'rituals', label: 'Sacred Remedies & Healings' },
+    { id: 'shop', label: 'Consecrated Store', badge: 'Active' },
   ];
 
   return (
@@ -326,7 +324,7 @@ export const Header: React.FC<HeaderProps> = ({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSearchSubmit();
                   }}
-                  placeholder="Search astrologers, horoscope, tarot…"
+                  placeholder="Search remedies, consecrated yantras, rituals, bracelets…"
                   className="bg-transparent text-xs text-white placeholder-[#A8B0D0]/70 w-full focus:outline-hidden font-normal"
                 />
                 
@@ -393,18 +391,18 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
 
-                    {/* Top Astrologers */}
+                    {/* Top Sacred Offerings */}
                     <div className="pt-2 border-t border-white/10">
                       <div className="text-[10px] uppercase font-bold tracking-wider text-[#A8B0D0] mb-2 flex items-center gap-1">
                         <Star className="w-3 h-3 text-[#F5C542]" />
-                        <span>Popular Astrologers</span>
+                        <span>Popular Sacred Remedies</span>
                       </div>
                       <div className="space-y-1">
-                        {POPULAR_ASTROLOGERS.map((a, i) => (
+                        {POPULAR_REMEDIES.map((a, i) => (
                           <button
                             key={i}
                             type="button"
-                            onClick={() => handleNav('readers')}
+                            onClick={() => handleNav('rituals')}
                             className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-white/[0.06] flex items-center justify-between text-slate-300 hover:text-white transition-colors cursor-pointer"
                           >
                             <div>
@@ -423,13 +421,12 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (onOpenSearch) onOpenSearch();
-                        else handleNav('readers');
+                        handleNav('rituals');
                         setDesktopSearchOpen(false);
                       }}
                       className="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-[#F5C542]/20 to-[#FFD86B]/20 hover:from-[#F5C542]/30 hover:to-[#FFD86B]/30 border border-[#F5C542]/40 text-[#F5C542] hover:text-white font-bold text-center flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <span>Explore Global Search Portal</span>
+                      <span>Explore All Sacred Remedies &amp; Store</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </motion.div>
@@ -577,7 +574,7 @@ export const Header: React.FC<HeaderProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search astrologers, horoscope, tarot…"
+                    placeholder="Search remedies, consecrated yantras, rituals, bracelets…"
                     className="w-full pl-9 pr-9 py-2.5 rounded-full bg-white/[0.08] border border-[#F5C542]/40 text-white placeholder-[#A8B0D0]/70 text-xs focus:outline-hidden focus:ring-2 focus:ring-[#F5C542]"
                   />
                   {searchQuery && (
@@ -639,24 +636,22 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onStartReading();
+                  handleNav('rituals');
                 }}
                 className="w-full py-3 px-4 rounded-full bg-gradient-to-r from-[#F5C542] via-[#FFD86B] to-[#FFB703] text-[#070B1F] font-black text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
-                <MessageSquare className="w-4 h-4 fill-[#070B1F]" />
-                <span>Start Free Chat with Psychics</span>
+                <Flame className="w-4 h-4 fill-[#070B1F]" />
+                <span>Explore Sacred Remedies &amp; Healings</span>
               </button>
 
               {/* Menu Links */}
               <div className="space-y-1 divide-y divide-white/5 text-sm font-medium text-slate-200">
                 {[
-                  { label: 'Chat With Psychic (Live)', id: 'readers' },
-                  { label: '💖 Best In Love Readings', id: 'readers' },
-                  { label: "Today's Horoscope", id: 'horoscope' },
-                  { label: 'Daily Tarot Oracle', id: 'tarot' },
-                  { label: 'Love Compatibility Score', id: 'compatibility' },
-                  { label: 'Consecrated Rituals & Spells', id: 'rituals' },
-                  { label: 'LUMSIC Sacred Store (New)', id: 'shop' },
+                  { label: '🌿 Sacred Remedies & Spells', id: 'rituals' },
+                  { label: '✨ Distance Energy Healing', id: 'rituals' },
+                  { label: '🛍️ LUMSIC Consecrated Store', id: 'shop' },
+                  { label: '💖 Love & Reunion Ceremonies', id: 'rituals' },
+                  { label: '🔒 100% Vedic Cleansing Guarantee', id: 'rituals' },
                 ].map((item, idx) => (
                   <button
                     key={idx}
